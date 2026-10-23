@@ -14,8 +14,14 @@ from pathlib import Path
 
 def write_state(directory, **values):
     directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    previous = read_state(directory)
+    last_success = previous.get("last_success_at")
+    if not last_success and previous.get("status") == "completed":
+        last_success = previous.get("updated_at")
+    if values.get("status") == "completed":
+        last_success = time.time()
     temporary = directory / "status.tmp"
-    temporary.write_text(json.dumps({**values, "updated_at": time.time()}))
+    temporary.write_text(json.dumps({**values, "updated_at": time.time(), "last_success_at": last_success}))
     temporary.replace(directory / "status.json")
 
 

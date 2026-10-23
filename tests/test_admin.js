@@ -19,6 +19,9 @@ test("admin submits selected catalog, limit, directory and cancellation with CSR
   elements["#tmdb-kind"].value = "series";
   elements["#tmdb-batch-limit"].value = "25";
   const posts = [];
+  let state = { status: "idle" };
+  const timers = [];
+  let reloads = 0;
   const panel = {
     dataset: { batchEndpoint: "/api/tmdb/batch", csrf: "csrf-token" },
     querySelector: selector => elements[selector],
@@ -27,9 +30,10 @@ test("admin submits selected catalog, limit, directory and cancellation with CSR
     document: { querySelector: () => panel }, URLSearchParams,
     fetch: async (endpoint, options) => {
       if (options.method === "POST") posts.push(options.body);
-      return { ok: true, json: async () => ({ status: "idle" }) };
+      return { ok: true, json: async () => state };
     },
-    clearTimeout() {}, setTimeout() {},
+    clearTimeout() {}, setTimeout(callback) { timers.push(callback); },
+    location: { reload() { reloads++; } },
   });
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
@@ -43,4 +47,11 @@ test("admin submits selected catalog, limit, directory and cancellation with CSR
   assert.equal(posts[1].get("action"), "directory");
   await elements["#tmdb-batch-cancel"].handlers.click();
   assert.equal(posts[2].get("action"), "cancel");
+  state = { status: "running", phase: "platforms" };
+  await elements["#tmdb-directory"].handlers.click();
+  await flush();
+  state = { status: "completed" };
+  await timers.shift()();
+  timers.shift()();
+  assert.equal(reloads, 1, "completion refreshes the persisted update dates");
 });

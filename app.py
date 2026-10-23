@@ -308,9 +308,18 @@ def create_app(db_path=None):
         kind = request.args.get("kind", "movies")
         if kind not in {"movies", "series"}:
             abort(400, description="Catálogo TMDB inválido.")
+        dates = store.maintenance_dates(kind)
+        dates["application"] = None
+        if app.config["UPDATE_ENABLED"]:
+            state = update_status()
+            timestamp = state.get("last_success_at")
+            if not timestamp and state.get("status") == "completed":
+                timestamp = state.get("updated_at")
+            if timestamp:
+                dates["application"] = datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec="seconds")
         return render_template(
             "admin.html", labels=LABELS, active="admin", kind=kind,
-            coverage=store.tmdb_coverage(kind),
+            coverage=store.tmdb_coverage(kind), maintenance_dates=dates,
         )
 
     @app.get("/movies", defaults={"kind": "movies"})
@@ -339,12 +348,10 @@ def create_app(db_path=None):
                 name.casefold() for name in CHILDREN_CATEGORIES[kind]
             }]
         names = []
-        coverage = None
         if kind in {"movies", "series"}:
             names = ordered_platforms(
                 set(store.provider_names(kind)) | set(store.subscriptions()) | set(filters.get("provider", [])),
             )
-            coverage = store.tmdb_coverage(kind)
         return render_template(
             "catalog.html", kind=kind,
             title=f"Niños · {LABELS[kind]}" if kids else (f"Otros alfabetos · {LABELS[kind]}" if foreign else LABELS[kind]),
@@ -357,7 +364,7 @@ def create_app(db_path=None):
             },
             genres=store.genres(kind), movie_eras=MOVIE_ERAS,
             provider_options=provider_icons({"all": names})["all"],
-            subscriptions=ordered_platforms(store.subscriptions()), coverage=coverage,
+            subscriptions=ordered_platforms(store.subscriptions()),
             selected_categories=filters["category"] if isinstance(filters["category"], list) else ([filters["category"]] if filters["category"] else []),
             pagination=page_links(result, "kids_listing" if kids else "listing", dict(kind=kind, **filters)),
         )
@@ -603,6 +610,7 @@ def main(argv=None):
     export.add_argument("destination", type=Path)
     serve = commands.add_parser("serve", help="Abrir el servidor web local")
     serve.add_argument("--port", type=int, default=5000)
+    serve.add_argument("--no-reload", action="store_true", help="Desactivar la recarga automática al editar Python")
     args = parser.parse_args(argv)
 
     try:
@@ -652,7 +660,11 @@ def main(argv=None):
         elif args.command == "serve":
             if not 1 <= args.port <= 65535:
                 raise CatalogError("El puerto debe estar entre 1 y 65535.")
-            create_app(args.db).run(host="127.0.0.1", port=args.port, debug=False)
+            local_app = create_app(args.db)
+            local_app.config["TEMPLATES_AUTO_RELOAD"] = True
+            local_app.run(
+                host="127.0.0.1", port=args.port, debug=False, use_reloader=not args.no_reload
+            )
     except (CatalogError, sqlite3.Error, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1

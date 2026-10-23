@@ -7,8 +7,6 @@ document.addEventListener("submit", async (event) => {
   event.preventDefault();
   const button = form.querySelector("button");
   if (button.disabled) return;
-  if (isBanned && form.elements.banned.value === "1" &&
-      !window.confirm("¿Quieres ocultar esta película del catálogo? Podrás desbloquearla desde su ficha.")) return;
   const errorBox = form.querySelector(".watched-error");
   button.disabled = true;
   errorBox.hidden = true;

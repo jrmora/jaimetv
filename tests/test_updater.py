@@ -51,6 +51,15 @@ class UpdateTests(unittest.TestCase):
         write_state(self.state, status="completed", message="done")
         self.assertEqual(read_state(self.state)["status"], "completed")
 
+    def test_legacy_success_date_survives_new_attempt(self):
+        self.state.mkdir()
+        (self.state / "status.json").write_text(json.dumps({
+            "status": "completed", "updated_at": 1234567890,
+        }))
+        write_state(self.state, status="running")
+        write_state(self.state, status="failed")
+        self.assertEqual(read_state(self.state)["last_success_at"], 1234567890)
+
     def test_requires_authentication_and_csrf(self):
         self.assertEqual(self.app.test_client().post("/api/application-update").status_code, 401)
         self.assertEqual(self.client.post("/api/application-update",

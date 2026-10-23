@@ -41,8 +41,6 @@
     <p id="provider-message" class="small mt-2" role="status" aria-live="polite" hidden></p>
   </div>
   <div class="p-2 border-top">
-    <h3 class="h6">Cobertura TMDB</h3>
-    <p class="small">{{ coverage.checked }} de {{ coverage.total }} títulos consultados en este catálogo (todos los filtros). {{ coverage.matched }} asociados, {{ coverage.candidates }} por elegir y {{ coverage.missing }} sin coincidencia. {{ coverage.pending }} pendientes.</p>
     <label for="tmdb-status" class="form-label small">Estado TMDB</label>
     <select id="tmdb-status" name="tmdb_status" class="form-select form-select-sm mb-3">
       {% for value, label in [('all', 'Todos'), ('candidates', 'Por elegir'), ('matched', 'Asociados'), ('missing', 'Sin coincidencia'), ('pending', 'Pendientes')] %}

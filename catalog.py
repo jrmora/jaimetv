@@ -186,6 +186,12 @@ class CatalogStore:
                 )
             """)
             db.execute("""
+                CREATE TABLE IF NOT EXISTS maintenance_updates (
+                    operation TEXT PRIMARY KEY,
+                    updated_at TEXT NOT NULL
+                )
+            """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS tmdb_metadata (
                     kind TEXT NOT NULL,
                     record_id TEXT NOT NULL,
@@ -266,6 +272,27 @@ class CatalogStore:
                 db.execute("DELETE FROM tmdb_provider_directory WHERE country=? AND kind=?", (country, kind))
                 db.executemany("INSERT INTO tmdb_provider_directory VALUES (?, ?, ?)",
                                [(country, kind, name) for name in sorted(set(names))])
+                db.execute(
+                    "INSERT OR REPLACE INTO maintenance_updates VALUES (?, ?)",
+                    (f"platforms:{country}:{kind}", datetime.now(timezone.utc).isoformat(timespec="seconds")),
+                )
+
+    def maintenance_dates(self, kind, country="CA"):
+        with self.connect() as db:
+            synced = db.execute("SELECT synced_at FROM sync_metadata WHERE id=1").fetchone()
+            platforms = db.execute(
+                "SELECT updated_at FROM maintenance_updates WHERE operation=?",
+                (f"platforms:{country}:{kind}",),
+            ).fetchone()
+            tmdb = db.execute(
+                "SELECT MAX(json_extract(payload, '$.checked_at')) FROM tmdb_metadata WHERE kind=? AND country=?",
+                (kind, country),
+            ).fetchone()
+        return {
+            "catalog": synced[0] if synced else None,
+            "platforms": platforms[0] if platforms else None,
+            "tmdb": tmdb[0],
+        }
 
     def provider_names(self, kind, country="CA"):
         table, _, key = KINDS[kind]

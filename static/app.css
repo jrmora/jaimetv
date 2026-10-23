@@ -35,6 +35,40 @@ td { overflow-wrap: anywhere; }
 .provider-filter-fallback { font-size: 0.6rem; overflow-wrap: anywhere; text-align: center; }
 .provider-option .btn-check:checked + .provider-choice { border-color: var(--bs-info); box-shadow: 0 0 0 1px var(--bs-info); }
 .provider-option .btn-check:focus-visible + .provider-choice { outline: 3px solid var(--bs-primary); outline-offset: 1px; }
-@media (max-width: 767.98px) {
+.catalog-sidebar > summary { min-height: 44px; cursor: pointer; }
+@media (min-width: 1200px) {
+  .catalog-sidebar > summary { pointer-events: none; list-style: none; }
+  .catalog-sidebar > summary::-webkit-details-marker { display: none; }
+  .filter-toggle-hint { display: none; }
+}
+@media (max-width: 1199.98px) {
   .catalog-layout { grid-template-columns: minmax(0, 1fr); }
+  .catalog-sidebar > summary { display: list-item; margin-left: 1rem; }
+  .catalog-layout { gap: 1rem; }
+}
+@media (min-width: 600px) and (max-width: 1199.98px) {
+  .catalog-page { max-width: none; padding-inline: 1.25rem; }
+  .catalog-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.75rem; }
+}
+@media (min-width: 900px) and (max-width: 1199.98px) {
+  .catalog-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+@media (max-width: 599.98px) {
+  .navbar > .container { gap: 0.5rem !important; justify-content: flex-start; }
+  .navbar-brand { margin-right: auto; }
+  .site-nav-links { order: 2; flex: 0 0 100%; flex-wrap: nowrap !important; overflow-x: auto; gap: 1rem !important; }
+  .site-nav-links .nav-link { flex-shrink: 0; white-space: nowrap; min-height: 44px; display: flex; align-items: center; }
+  #fullscreen-toggle { min-width: 44px; min-height: 44px; }
+  .catalog-page { padding-top: 1rem !important; }
+  .catalog-layout { margin-top: 1rem !important; gap: 0.75rem; }
+  .catalog-sidebar { padding: 0.5rem 0.75rem !important; }
+  .catalog-sidebar > summary { display: list-item; align-content: center; }
+  .catalog-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.625rem; }
+  .catalog-card > .p-3 { padding: 0.625rem !important; }
+  .catalog-card h2 { overflow-wrap: anywhere; font-size: 0.9rem; }
+  .catalog-card .watched-form button { min-height: 44px; }
+  .card-pagination { margin-left: 0 !important; width: 100%; gap: 0.375rem !important; }
+  .card-pagination > span:first-child { flex: 1; min-width: 5rem; margin-right: 0 !important; font-size: 0.75rem; }
+  .card-pagination .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; }
+  .card-pagination .pagination-extra { display: none; }
 }

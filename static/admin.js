@@ -11,6 +11,7 @@
   const kind = panel.querySelector("#tmdb-kind");
   const limit = panel.querySelector("#tmdb-batch-limit");
   let timer;
+  let wasRunning = false;
 
   function message(text, error = false) {
     status.hidden = false;
@@ -38,6 +39,7 @@
       if (state.status === "idle") return;
       const progress = `${state.processed || 0} de ${state.total || 0} títulos; ${state.matched || 0} asociados, ${state.candidates || 0} por elegir, ${state.missing || 0} sin coincidencia.`;
       if (running) {
+        wasRunning = true;
         message(state.phase === "platforms" ? "Cargando plataformas de Canadá…" :
           `Consultando ${state.kind === "movies" ? "películas" : "series"}: ${progress}`);
         timer = setTimeout(check, 2000);
@@ -45,6 +47,10 @@
         message(`${state.status === "failed" ? `Proceso detenido: ${state.error}` :
           state.status === "cancelled" ? "Proceso cancelado." : "Proceso completado."} ${progress} Los avances se conservan.`,
         state.status === "failed");
+        if (wasRunning) {
+          wasRunning = false;
+          setTimeout(() => location.reload(), 2000);
+        }
       }
     } catch (error) {
       message(`No se pudo consultar el estado. ${error.message} Recarga para comprobarlo; el proceso no se cancela.`, true);

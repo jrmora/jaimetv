@@ -111,19 +111,21 @@ test("ban and restore buttons update and notify the catalog without a false watc
   assert.equal(state.button.textContent, "No me interesa");
   assert.equal(state.form.elements.banned.value, "1");
   assert.equal(state.classes.has("btn-danger"), false);
-  assert.equal(state.confirmations.length, 1);
+  assert.equal(state.confirmations.length, 0);
 });
 
-test("cancelling a ban confirmation sends no request and changes no state", async () => {
+test("ban submits immediately without requesting confirmation", async () => {
   let requests = 0;
-  const state = setup(async () => { requests++; }, true, false);
+  const state = setup(async () => {
+    requests++;
+    return { ok: true, json: async () => ({ banned: true }) };
+  }, true, false);
   await state.submit();
-  assert.equal(state.confirmations.length, 1);
-  assert.match(state.confirmations[0], /ocultar esta película/);
-  assert.equal(requests, 0);
-  assert.equal(state.form.elements.banned.value, "1");
+  assert.equal(state.confirmations.length, 0);
+  assert.equal(requests, 1);
+  assert.equal(state.form.elements.banned.value, "0");
   assert.equal(state.button.disabled, false);
-  assert.equal(state.events.length, 0);
+  assert.deepEqual(state.events, ["movie-state-changed"]);
 });
 
 test("watched changes do not request a ban confirmation", async () => {

@@ -161,8 +161,7 @@ esa temática. Las cachés antiguas no contienen palabras clave: usa
 
 **No me interesa**, solo en las fichas de películas, las oculta de todos los
 listados y búsquedas (incluidos Niños, Otros alfabetos y resultados por persona).
-Con JavaScript activo, pide confirmación antes de bloquear; cancelar no guarda
-cambios. Desbloquear y marcar como vista no requieren esta confirmación.
+Se aplica inmediatamente al pulsar el botón, sin pedir confirmación.
 No hay un filtro visible de bloqueadas. Para recuperarlas, abre
 `/movies?banned=only`, entra en su ficha y pulsa **Desbloquear**.
 Los demás filtros siguen aplicándose en esa vista.
@@ -420,6 +419,32 @@ python app.py serve --port 5050
 ```
 
 Abre <http://127.0.0.1:5000/> para entrar directamente en Películas.
+
+La barra superior incluye un botón con icono para entrar o salir de pantalla
+completa. También puedes salir con Esc. Se muestra en navegadores compatibles.
+
+En tablets y móviles (menos de 1200 px), los filtros se pliegan inicialmente:
+toca «Filtros» para abrirlos o cerrarlos. En tablets de 600–899 px se muestran
+cuatro tarjetas por fila; de 900–1199 px, cinco. En escritorio se conserva
+el panel lateral de filtros abierto.
+En móviles de menos de 600 px se muestran dos tarjetas por fila, navegación
+horizontal deslizable y paginación reducida a anterior, página actual y siguiente,
+con controles táctiles de al menos 44 px.
+
+Este comando usa `catalog.db` junto a `app.py` de forma predeterminada
+(salvo que hayas configurado `IPTV_DB_PATH` o `--db`). Recarga automáticamente
+el servidor cuando guardas cambios en Python, sin activar el depurador.
+Actualiza el navegador para ver los cambios. Para desactivar la recarga,
+ejecuta `python app.py serve --no-reload`.
+Esto solo afecta al servidor local; Oracle sigue ejecutándose con Gunicorn.
+
+Administración muestra las últimas fechas registradas en UTC para aplicación,
+sincronización IPTV, plataformas de Canadá y consultas TMDB (por catálogo).
+Las fechas persisten entre reinicios; las operaciones antiguas sin fecha
+registrada muestran «Sin registro de actualización». Un intento fallido no
+reemplaza la última comprobación correcta de la aplicación.
+El resumen «Cobertura TMDB» solo aparece en Administración; los listados
+conservan el filtro por estado TMDB, pero no muestran los contadores de cobertura.
 
 - La sección Resumen se ha eliminado. La ruta antigua `/dashboard` redirige a
   `/movies` para conservar marcadores anteriores. Los totales siguen disponibles

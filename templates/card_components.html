@@ -47,7 +47,7 @@
   <span class="text-muted me-2">Página {{ result.page }} de {{ result.pages }}{% if not compact %} · {{ result.total }} resultados{% endif %}</span>
   {% for link in links %}
     {% if link.url %}
-    <a class="btn btn-sm {{ 'btn-primary' if link.current else 'btn-outline-secondary' }}" href="{{ link.url }}" {% if link.current %}aria-current="page"{% endif %}>{{ link.label }}</a>
+    <a class="btn btn-sm {{ 'btn-primary' if link.current else 'btn-outline-secondary' }}{% if link.label|string not in ['Anterior', 'Siguiente'] and not link.current %} pagination-extra{% endif %}" href="{{ link.url }}" {% if link.current %}aria-current="page"{% endif %}>{{ link.label }}</a>
     {% else %}
     <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">{{ link.label }}</span>
     {% endif %}
