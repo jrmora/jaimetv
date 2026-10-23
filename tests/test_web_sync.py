@@ -44,7 +44,7 @@ class WebSyncTests(unittest.TestCase):
         return self.client.post("/api/sync", data={"csrf": self.token})
 
     def test_button_csrf_and_no_store(self):
-        page = self.client.get("/movies")
+        page = self.client.get("/admin")
         self.assertIn(b'id="catalog-sync"', page.data)
         self.assertIn(b"sync.js", page.data)
         for token in ("", "invalid", "\u00e1"):

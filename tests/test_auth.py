@@ -40,7 +40,7 @@ class AuthTests(unittest.TestCase):
         })
 
     def test_all_private_surfaces_require_login(self):
-        for path in ("/movies", "/series", "/channels", "/catalog/movies/1"):
+        for path in ("/movies", "/series", "/channels", "/catalog/movies/1", "/admin"):
             self.assertEqual(self.client.get(path).location, "/login")
         for method, path in (("get", "/api/catalog/movies"), ("post", "/api/sync"),
                              ("post", "/catalog/movies/1/watched")):

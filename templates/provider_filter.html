@@ -34,7 +34,7 @@
         </label>
       </div>
       {% else %}
-      <p class="small text-muted">Carga las plataformas de Canadá con el botón de abajo.</p>
+      <p class="small text-muted">Carga las plataformas desde Administración.</p>
       {% endfor %}
     </div>
     <p id="provider-search-empty" class="small text-muted" hidden>No hay plataformas con ese nombre.</p>
@@ -49,13 +49,5 @@
       <option value="{{ value }}" {% if filters.get('tmdb_status', 'all') == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
-    <label for="tmdb-batch-limit" class="form-label small">Títulos pendientes por lote (1–500)</label>
-    <input id="tmdb-batch-limit" type="number" min="1" max="500" value="50" class="form-control form-control-sm mb-2" form="tmdb-batch-controls">
-    <div class="d-flex flex-column gap-2">
-      <button id="tmdb-directory" type="button" class="btn btn-outline-secondary btn-sm">Actualizar plataformas de Canadá</button>
-      <button id="tmdb-batch-start" type="button" class="btn btn-outline-primary btn-sm">Consultar pendientes con TMDB</button>
-      <button id="tmdb-batch-cancel" type="button" class="btn btn-outline-danger btn-sm" hidden>Detener después de la consulta actual</button>
-    </div>
-    <p id="tmdb-batch-status" class="small mt-2" role="status" aria-live="polite" hidden></p>
   </div>
 </details>

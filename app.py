@@ -303,6 +303,16 @@ def create_app(db_path=None):
     def dashboard():
         return redirect(url_for("listing", kind="movies"))
 
+    @app.get("/admin")
+    def administration():
+        kind = request.args.get("kind", "movies")
+        if kind not in {"movies", "series"}:
+            abort(400, description="Catálogo TMDB inválido.")
+        return render_template(
+            "admin.html", labels=LABELS, active="admin", kind=kind,
+            coverage=store.tmdb_coverage(kind),
+        )
+
     @app.get("/movies", defaults={"kind": "movies"})
     @app.get("/series", defaults={"kind": "series"})
     @app.get("/channels", defaults={"kind": "channels"})

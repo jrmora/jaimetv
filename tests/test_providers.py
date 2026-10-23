@@ -323,8 +323,8 @@ class ProviderFilterTests(unittest.TestCase):
                 self.assertIn('id="provider-filter"', html)
                 self.assertIn("Canadá (CA)", html)
                 self.assertIn('id="my-services-toggle"', html)
-                self.assertIn('form="tmdb-batch-controls"', html)
-                self.assertIn('<form id="tmdb-batch-controls">', html)
+                self.assertNotIn('id="tmdb-batch-start"', html)
+                self.assertNotIn('id="tmdb-batch-controls"', html)
                 self.assertIn("pendientes", html)
         self.assertNotIn('id="provider-filter"', self.client.get("/channels").get_data(as_text=True))
         for query in ("provider=Netflix", "my_services=1"):

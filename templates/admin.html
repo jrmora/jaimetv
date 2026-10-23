@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Administración · Catálogo IPTV{% endblock %}
+{% block page_heading %}Administración{% endblock %}
+{% block content %}
+<div class="row g-4">
+  <section class="col-lg-6">
+    <div class="border rounded p-3 h-100">
+      <h2 class="h5">Aplicación</h2>
+      {% if config.UPDATE_ENABLED %}
+      <button id="application-update" type="button" class="btn btn-outline-primary"
+              data-endpoint="{{ url_for('application_update') }}" data-csrf="{{ sync_csrf }}">Actualizar aplicación</button>
+      <div id="update-status" class="mt-3" role="status" aria-live="polite" hidden></div>
+      {% else %}
+      <p class="text-muted">La actualización desde la web no está configurada en este servidor.</p>
+      {% endif %}
+    </div>
+  </section>
+  <section class="col-lg-6">
+    <div class="border rounded p-3 h-100">
+      <h2 class="h5">Catálogo IPTV</h2>
+      <button id="catalog-sync" type="button" class="btn btn-outline-primary"
+              data-endpoint="{{ url_for('catalog_sync') }}" data-csrf="{{ sync_csrf }}" hidden>Sincronizar catálogo</button>
+      <div id="sync-status" class="mt-3" role="status" aria-live="polite" hidden></div>
+    </div>
+  </section>
+  <section class="col-12">
+    <div id="tmdb-admin" class="border rounded p-3"
+         data-batch-endpoint="{{ url_for('tmdb_batch_job') }}" data-csrf="{{ sync_csrf }}">
+      <h2 class="h5">TMDB</h2>
+      <div class="d-flex gap-3 mb-3">
+        {% for value in ['movies', 'series'] %}
+        <a href="{{ url_for('administration', kind=value) }}" {% if kind == value %}aria-current="page" class="fw-bold"{% endif %}>{{ labels[value] }}</a>
+        {% endfor %}
+      </div>
+      <p>{{ coverage.checked }} de {{ coverage.total }} títulos consultados. {{ coverage.matched }} asociados, {{ coverage.candidates }} por elegir, {{ coverage.missing }} sin coincidencia y {{ coverage.pending }} pendientes.</p>
+      <form id="tmdb-batch-controls">
+        <label for="tmdb-kind" class="form-label">Catálogo</label>
+        <select id="tmdb-kind" class="form-select mb-3">
+          {% for value in ['movies', 'series'] %}
+          <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ labels[value] }}</option>
+          {% endfor %}
+        </select>
+        <label for="tmdb-batch-limit" class="form-label">Títulos pendientes por lote (1–500)</label>
+        <input id="tmdb-batch-limit" type="number" min="1" max="500" value="50" class="form-control mb-3" required>
+        <div class="d-flex flex-wrap gap-2">
+          <button id="tmdb-directory" type="button" class="btn btn-outline-secondary">Actualizar plataformas de Canadá</button>
+          <button id="tmdb-batch-start" type="submit" class="btn btn-outline-primary">Consultar pendientes con TMDB</button>
+          <button id="tmdb-batch-cancel" type="button" class="btn btn-outline-danger" hidden>Detener después de la consulta actual</button>
+        </div>
+      </form>
+      <p id="tmdb-batch-status" class="mt-3" role="status" aria-live="polite" hidden></p>
+    </div>
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='sync.js') }}" defer></script>
+{% if config.UPDATE_ENABLED %}<script src="{{ url_for('static', filename='update.js') }}" defer></script>{% endif %}
+<script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+{% endblock %}

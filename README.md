@@ -600,6 +600,13 @@ recargarse para renovar su token CSRF.
 
 ## Actualizar desde la propia web (Oracle)
 
+La página **Administración** (`/admin`), accesible desde la navegación, reúne
+Actualizar aplicación, Sincronizar catálogo y los controles de TMDB: actualizar
+plataformas, consultar pendientes de películas o series, elegir el tamaño de lote
+y detener el trabajo. Conserva las mismas protecciones de sesión y CSRF.
+Los filtros y la cobertura permanecen en el catálogo; las consultas TMDB de una
+ficha individual siguen disponibles en esa ficha.
+
 El botón **Actualizar aplicación** busca `origin/main` e instala directamente,
 sin pedir otra confirmación. Solo aparece con autenticación y `IPTV_UPDATE_STATE`
 configurados. No hay publicación automática al hacer push.
