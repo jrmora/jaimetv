@@ -18,6 +18,7 @@ from tmdb import TMDBClient, TMDBError, TMDBRateLimitError, enrich, fingerprint
 from provider_logos import provider_icons
 from tmdb_jobs import TMDBBatch
 from platforms import ordered_platforms
+from auth import configure_auth
 
 
 LABELS = {"movies": "Películas", "series": "Series", "channels": "Canales"}
@@ -27,6 +28,7 @@ DEFAULT_DB = Path(__file__).resolve().parent / "catalog.db"
 def create_app(db_path=None):
     app = Flask(__name__)
     app.secret_key = secrets.token_hex(32)
+    configure_auth(app)
     store = CatalogStore(db_path or os.environ.get("IPTV_DB_PATH", DEFAULT_DB))
     app.config["CATALOG_STORE"] = store
     sync_lock = threading.Lock()

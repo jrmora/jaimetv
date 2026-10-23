@@ -559,8 +559,44 @@ acceso a Internet para los estilos Bootstrap; los datos y la búsqueda se sirven
 localmente. Las fichas y las tarjetas
 pueden cargar imágenes remotas del registro.
 El servidor de desarrollo Flask escucha **solo en 127.0.0.1**, sin depurador;
-no lo expongas públicamente: no incluye autenticación multiusuario.
+no lo expongas públicamente sin HTTPS y autenticación.
 La sincronización es explícita desde consola o el botón web y no hay reproducción de contenido.
+
+## Acceso privado mediante formulario
+
+Para publicar la web, utiliza un proxy HTTPS y un único proceso Gunicorn
+(`--workers 1 --threads 4`) escuchando en `127.0.0.1:5050`.
+No abras ese puerto a Internet.
+
+La autenticación se activa con `auth.local.json` junto a la aplicación, o con
+`IPTV_AUTH_PATH` apuntando a un archivo privado. Este archivo queda excluido de Git.
+Debe contener `username`, `password_hash` (hash Werkzeug scrypt o PBKDF2) y
+`secret_key` (secreto aleatorio de al menos 64 caracteres). No uses aquí el hash
+bcrypt generado por Caddy. Genera el hash con `werkzeug.security.generate_password_hash`
+y la clave con `secrets.token_hex(32)`; introduce la contraseña de forma interactiva
+con `getpass`, nunca como argumento ni en el historial.
+Protege el archivo con permisos `600` y conserva la clave de sesión entre reinicios.
+No copies la configuración de producción al repositorio.
+
+Cuando `IPTV_AUTH_PATH` está definido, un archivo ausente o inválido impide el
+arranque. Sin archivo ni variable se conserva el uso local sin autenticación;
+ese modo no debe exponerse públicamente.
+
+`/login` muestra un formulario, sin autenticación HTTP Basic. Todas las rutas
+salvo login y archivos estáticos requieren sesión; la API responde 401 en vez de
+redirigir. El cierre de sesión usa POST con CSRF, igual que el acceso.
+Las sesiones caducan a las 12 horas y sus cookies son Secure, HttpOnly y SameSite=Lax:
+para probar el acceso usa HTTPS. Hay un límite global de 10 intentos fallidos
+por minuto y proceso, compartido por los dispositivos; usa una contraseña larga
+y única. Es un acceso doméstico de una sola cuenta, no un sistema multiusuario.
+
+Al migrar desde Caddy Basic, conserva esa protección hasta instalar y probar
+el formulario mediante el túnel SSH con HTTPS o un acceso HTTPS de prueba protegido.
+Solo entonces elimina el bloque `basicauth`, manteniendo el proxy HTTPS.
+Verifica sin cookies que `/movies` redirige a `/login`, que la API devuelve 401
+y que la contraseña permite acceder. No publiques una configuración sin
+`IPTV_AUTH_PATH` válido. Tras un reinicio, las páginas antiguas pueden necesitar
+recargarse para renovar su token CSRF.
 
 ## Pruebas
 
