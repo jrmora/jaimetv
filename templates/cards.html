@@ -1,0 +1,7 @@
+{% from "card_components.html" import cards, pager with context %}
+<div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+  <p id="summary" class="text-muted mb-0" role="status" aria-live="polite">{{ result.total }} resultados</p>
+  {{ pager(result, pagination, compact=true) }}
+</div>
+{{ cards(result, kind, filters) }}
+{{ pager(result, pagination) }}

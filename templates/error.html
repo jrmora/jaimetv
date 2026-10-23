@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block page_heading %}Error {{ code }}{% endblock %}
+{% block content %}
+<div class="alert alert-danger">{{ message }}</div>
+<a href="{{ url_for('listing', kind='movies') }}" class="btn btn-primary">Volver a películas</a>
+{% endblock %}

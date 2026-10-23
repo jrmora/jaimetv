@@ -1,0 +1,10 @@
+[project]
+name = "xtream-catalog"
+version = "1.0.0"
+description = "Explorador local de catálogos Xtream Codes"
+requires-python = ">=3.12"
+dependencies = [
+    "Flask>=3.1,<4",
+    "pandas>=2.2.3,<4",
+    "requests>=2.32.3,<3",
+]

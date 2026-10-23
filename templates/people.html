@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% from "card_components.html" import cards, pager with context %}
+{% block title %}{{ name }} · Catálogo IPTV{% endblock %}
+{% block page_heading %}{{ name }}{% endblock %}
+{% block content %}
+{% for kind, result in results.items() %}
+<section class="mb-5" aria-label="{{ labels[kind] }}">
+  <h2 class="h4">{{ labels[kind] }} ({{ result.total }})</h2>
+  {{ pager(result, pagination[kind]) }}
+  {{ cards(result, kind, dict(view=view, person=name, **people_pages)) }}
+  {{ pager(result, pagination[kind]) }}
+</section>
+{% endfor %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='cards.js') }}" defer></script>
+{% endblock %}

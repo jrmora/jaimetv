@@ -1,0 +1,16 @@
+{% macro watched_button(record_id, watched, csrf, filters) %}
+<form class="watched-form mt-2" method="post" action="{{ url_for('movie_watched', record_id=record_id, **filters) }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="watched" value="{{ '0' if watched else '1' }}">
+  <button type="submit" class="btn btn-sm {{ 'btn-success' if watched else 'btn-outline-secondary' }}" aria-pressed="{{ 'true' if watched else 'false' }}" title="{{ 'Marcar como no vista' if watched else 'Marcar como vista' }}">{{ 'Vista' if watched else 'Ya la vi' }}</button>
+  <p class="watched-error small text-danger mb-0 mt-1" role="alert" hidden></p>
+</form>
+{% endmacro %}
+{% macro banned_button(record_id, banned, csrf, filters) %}
+<form class="banned-form mt-2" method="post" action="{{ url_for('movie_banned', record_id=record_id, **filters) }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="banned" value="{{ '0' if banned else '1' }}">
+  <button type="submit" class="btn btn-sm {{ 'btn-danger' if banned else 'btn-outline-secondary' }}" aria-pressed="{{ 'true' if banned else 'false' }}" title="{{ 'Volver a mostrar esta película' if banned else 'Ocultar esta película del catálogo' }}">{{ 'Desbloquear' if banned else 'No me interesa' }}</button>
+  <p class="watched-error small text-danger mb-0 mt-1" role="alert" hidden></p>
+</form>
+{% endmacro %}

@@ -1,0 +1,61 @@
+<details id="provider-filter" class="border rounded" open
+         data-subscriptions="{{ subscriptions|tojson|forceescape }}"
+         data-batch-endpoint="{{ url_for('tmdb_batch_job') }}"
+         data-csrf="{{ sync_csrf }}" data-kind="{{ kind }}">
+  <summary class="fw-semibold p-2">Dónde se puede ver</summary>
+  <div class="p-2 border-top">
+    <label for="provider-access" class="form-label small">Tipo de acceso</label>
+    <select id="provider-access" name="access" class="form-select form-select-sm mb-3">
+      {% for value, label in [('flatrate', 'Suscripción'), ('all', 'Cualquier modalidad'), ('rent', 'Alquiler'), ('buy', 'Compra'), ('free', 'Gratis'), ('ads', 'Con anuncios')] %}
+      <option value="{{ value }}" {% if filters.get('access', 'flatrate') == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <label class="form-label small" for="my-services-toggle">Mis plataformas</label>
+    <select class="form-select form-select-sm mb-2" id="my-services-toggle" name="my_services">
+      {% for value, label in [(0, 'Todas las plataformas'), (1, 'Solo mis servicios'), (2, 'Fuera de mis servicios')] %}
+      <option value="{{ value }}" {% if filters.get('my_services', 0) == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <p id="saved-services" class="small text-muted">Mis servicios: {{ subscriptions|join(', ') or 'Ninguno guardado' }}</p>
+    <p id="my-services-warning" class="small text-warning-emphasis" {% if filters.get('my_services') != 1 or subscriptions %}hidden{% endif %}>No tienes servicios en services.json. Selecciona todas las plataformas o actualiza el archivo.</p>
+    <label for="provider-search" class="form-label small">Buscar plataformas</label>
+    <input id="provider-search" type="search" class="form-control form-control-sm mb-2" placeholder="Netflix, Disney, Crave…" autocomplete="off">
+    <div class="provider-options">
+      {% for provider in provider_options %}
+      <div class="provider-option" data-provider-name="{{ provider.name }}">
+        <input class="btn-check" type="checkbox" id="provider-{{ loop.index }}" name="provider" value="{{ provider.name }}" {% if provider.name in filters.get('provider', []) %}checked{% endif %}>
+        <label class="provider-choice rounded" for="provider-{{ loop.index }}" title="{{ provider.name }}">
+          {% if provider.filename %}
+          <img src="{{ url_for('static', filename=provider.filename) }}" width="40" height="40" alt="{{ provider.name }}" loading="lazy">
+          <span class="provider-filter-fallback" hidden>{{ provider.name }}</span>
+          {% else %}
+          <span class="provider-filter-fallback">{{ provider.name }}</span>
+          {% endif %}
+        </label>
+      </div>
+      {% else %}
+      <p class="small text-muted">Carga las plataformas de Canadá con el botón de abajo.</p>
+      {% endfor %}
+    </div>
+    <p id="provider-search-empty" class="small text-muted" hidden>No hay plataformas con ese nombre.</p>
+    <p id="provider-message" class="small mt-2" role="status" aria-live="polite" hidden></p>
+  </div>
+  <div class="p-2 border-top">
+    <h3 class="h6">Cobertura TMDB</h3>
+    <p class="small">{{ coverage.checked }} de {{ coverage.total }} títulos consultados en este catálogo (todos los filtros). {{ coverage.matched }} asociados, {{ coverage.candidates }} por elegir y {{ coverage.missing }} sin coincidencia. {{ coverage.pending }} pendientes.</p>
+    <label for="tmdb-status" class="form-label small">Estado TMDB</label>
+    <select id="tmdb-status" name="tmdb_status" class="form-select form-select-sm mb-3">
+      {% for value, label in [('all', 'Todos'), ('candidates', 'Por elegir'), ('matched', 'Asociados'), ('missing', 'Sin coincidencia'), ('pending', 'Pendientes')] %}
+      <option value="{{ value }}" {% if filters.get('tmdb_status', 'all') == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+    <label for="tmdb-batch-limit" class="form-label small">Títulos pendientes por lote (1–500)</label>
+    <input id="tmdb-batch-limit" type="number" min="1" max="500" value="50" class="form-control form-control-sm mb-2" form="tmdb-batch-controls">
+    <div class="d-flex flex-column gap-2">
+      <button id="tmdb-directory" type="button" class="btn btn-outline-secondary btn-sm">Actualizar plataformas de Canadá</button>
+      <button id="tmdb-batch-start" type="button" class="btn btn-outline-primary btn-sm">Consultar pendientes con TMDB</button>
+      <button id="tmdb-batch-cancel" type="button" class="btn btn-outline-danger btn-sm" hidden>Detener después de la consulta actual</button>
+    </div>
+    <p id="tmdb-batch-status" class="small mt-2" role="status" aria-live="polite" hidden></p>
+  </div>
+</details>

@@ -1,0 +1,71 @@
+{% from "trailer.html" import trailer_link %}
+{% if tmdb.status == 'missing' %}
+<p>No se encontró una coincidencia. Los datos originales se conservan.</p>
+{% elif tmdb.status == 'candidates' %}
+<p>No hay una coincidencia inequívoca. Elige la obra correcta:</p>
+<ul class="list-unstyled">
+{% for candidate in tmdb.candidates %}
+  <li class="mb-2">
+    <button class="btn btn-outline-primary tmdb-candidate" type="button" data-id="{{ candidate.id }}">Usar {{ candidate.title }} · {{ candidate.date or 'Sin fecha' }}</button>
+    <span class="text-muted">{{ candidate.original_title }}</span>
+    <a href="https://www.themoviedb.org/{{ 'movie' if request.view_args.kind == 'movies' else 'tv' }}/{{ candidate.id }}" target="_blank" rel="noopener noreferrer">Ver candidato en TMDB</a>
+  </li>
+{% endfor %}
+</ul>
+{% else %}
+<p><a href="https://www.themoviedb.org/{{ tmdb.media }}/{{ tmdb.id }}" target="_blank" rel="noopener noreferrer">Ver ficha en TMDB</a></p>
+<div class="table-responsive">
+<table class="table"><tbody>
+  {% for field, label, value in [
+    ('', 'Título en español', tmdb.title), ('alternative_title', 'Título original', tmdb.original_title),
+    ('premiere', 'Estreno según TMDB', tmdb.release_date),
+    ('plot', 'Sinopsis en español', tmdb.overview), ('genre', 'Géneros', tmdb.genres|join(', ')),
+    ('episode_run_time', 'Duración según TMDB (min)', tmdb.runtime),
+    ('', 'Idioma original (no indica el audio de tu copia)', tmdb.original_language),
+    ('', 'Países de producción', tmdb.countries|join(', ')),
+    ('', 'Productoras', tmdb.companies|join(', ')), ('', 'Temporadas', tmdb.seasons),
+    ('', 'Episodios', tmdb.episodes)
+  ] %}
+  {% if value %}<tr{% if field %} data-replaces-field="{{ field }}"{% endif %}><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endif %}
+  {% endfor %}
+  {% for field, label, names in [('director', 'Dirección según TMDB', tmdb.directors), ('creators', 'Creadores', tmdb.creators)] %}
+  {% if names %}
+  <tr{% if field == 'director' %} data-replaces-field="director"{% endif %}><th scope="row">{{ label }}</th><td>
+    {% for name in names %}<a class="person-link" href="{{ url_for('person_results', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+  </td></tr>
+  {% endif %}
+  {% endfor %}
+  {% if tmdb.votes and tmdb.rating is not none %}<tr data-replaces-field="rating"><th scope="row">Valoración TMDB</th><td>{{ tmdb.rating }}/10 · {{ tmdb.votes }} votos</td></tr>{% endif %}
+  {% if tmdb.cast %}<tr data-replaces-field="cast"><th scope="row">Reparto y personajes</th><td><ul class="mb-0">{% for person in tmdb.cast %}<li><a class="person-link" href="{{ url_for('person_results', name=person.name) }}">{{ person.name }}</a>{% if person.character %} — {{ person.character }}{% endif %}</li>{% endfor %}</ul></td></tr>{% endif %}
+  {% if tmdb.imdb_id and tmdb.imdb_id.startswith('tt') and tmdb.imdb_id[2:].isdigit() %}<tr><th scope="row">IMDb</th><td><a href="https://www.imdb.com/title/{{ tmdb.imdb_id }}/" target="_blank" rel="noopener noreferrer">{{ tmdb.imdb_id }}</a></td></tr>{% endif %}
+  {% if tmdb.trailer_url %}<tr data-replaces-field="youtube_trailer"><th scope="row">Tráiler TMDB</th><td>{{ trailer_link({'name': tmdb.title, 'trailer_url': tmdb.trailer_url}) }}{% if not tmdb.trailer_official %}<span class="small text-muted">No marcado como oficial</span>{% endif %}</td></tr>{% endif %}
+</tbody></table>
+</div>
+<h3 class="h5">Dónde verla en Canadá</h3>
+<ul>
+{% for key, label in [('flatrate', 'Suscripción'), ('rent', 'Alquiler'), ('buy', 'Compra'), ('free', 'Gratis'), ('ads', 'Con anuncios')] %}
+<li class="mb-3"><strong>{{ label }}:</strong>
+  <div class="provider-icons d-flex flex-wrap gap-2 mt-2">
+  {% for provider in provider_icons[key] %}
+    {% if provider.filename %}
+    <span class="provider-badge" tabindex="0" aria-label="{{ provider.name }}" title="{{ provider.name }}">
+      <img class="provider-logo rounded" src="{{ url_for('static', filename=provider.filename) }}" width="48" height="48" alt="{{ provider.name }}" loading="lazy">
+      <span class="provider-fallback small" hidden>{{ provider.name }} (icono no disponible)</span>
+      <span class="provider-tooltip" aria-hidden="true">{{ provider.name }}</span>
+    </span>
+    {% else %}
+    <span class="badge text-bg-secondary text-wrap">{{ provider.name }}</span>
+    {% endif %}
+  {% else %}
+    <span>Sin disponibilidad confirmada</span>
+  {% endfor %}
+  </div>
+</li>
+{% endfor %}
+</ul>
+<p><a href="https://www.themoviedb.org/{{ tmdb.media }}/{{ tmdb.id }}/watch?locale=CA" target="_blank" rel="noopener noreferrer">Ver disponibilidad en TMDB / JustWatch</a></p>
+{% if tmdb.backdrop_url %}
+<img class="detail-backdrop rounded border tmdb-backdrop" src="{{ tmdb.backdrop_url }}" alt="Imagen de fondo de {{ tmdb.title }}" loading="lazy" referrerpolicy="no-referrer">
+<p class="alert alert-secondary tmdb-image-error" hidden>No se pudo cargar la imagen de TMDB.</p>
+{% endif %}
+{% endif %}

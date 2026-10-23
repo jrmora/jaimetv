@@ -1,0 +1,5 @@
+{% macro trailer_link(item) -%}
+{% if item.trailer_url %}
+<a class="trailer-icon" href="{{ item.trailer_url }}" target="_blank" rel="noopener noreferrer" aria-label="Ver tráiler de {{ item.name }} en YouTube" title="Ver tráiler en YouTube"><img src="{{ url_for('static', filename='youtube.svg') }}" width="28" height="20" alt=""></a>
+{% endif %}
+{%- endmacro %}

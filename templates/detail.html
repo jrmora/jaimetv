@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "trailer.html" import trailer_link %}
+{% from "watched.html" import watched_button, banned_button %}
+{% block title %}{{ record.name }} · Catálogo IPTV{% endblock %}
+{% block back_navigation %}{% endblock %}
+{% block content %}
+{% set field_labels = {
+  'name': 'Nombre', 'title': 'Título', 'alternative_title': 'Título alternativo', 'year': 'Año', 'premiere': 'Estreno',
+  'plot': 'Sinopsis', 'cast': 'Reparto', 'director': 'Dirección',
+  'genre': 'Género', 'rating': 'Valoración', 'rating_5based': 'Valoración sobre 5',
+  'added': 'Fecha de incorporación', 'modified': 'Última actualización',
+  'last_modified': 'Última actualización', 'release_date': 'Fecha de estreno',
+  'releaseDate': 'Fecha de estreno', 'youtube_trailer': 'Tráiler de YouTube',
+  'episode_run_time': 'Duración por episodio (min)' if kind == 'series' else 'Duración (min)',
+  'category_name': 'Categoría principal', 'category_names': 'Categorías',
+  'stream_type': 'Tipo de contenido', 'direct_source': 'Fuente directa',
+  'custom_sid': 'Identificador personalizado', 'epg_channel_id': 'Identificador de la guía de TV',
+  'tv_archive': 'Archivo de TV disponible', 'tv_archive_duration': 'Días de archivo de TV',
+  'is_adult': 'Contenido para adultos', 'seasons': 'Temporadas'
+} %}
+<div class="row g-4 align-items-start">
+  <aside class="col-12 col-md-4 col-lg-3" aria-label="Imágenes del registro">
+    {% if image_url %}
+    <img id="detail-poster" src="{{ image_url }}" alt="Portada de {{ record.name }}"
+         data-error-id="poster-error" class="detail-poster rounded border bg-body-tertiary" referrerpolicy="no-referrer">
+    <p id="poster-error" class="alert alert-secondary mt-2" role="status" hidden>No se pudo cargar la imagen.</p>
+    {% else %}
+    <p class="alert alert-secondary">Este registro no tiene una imagen HTTP(S) válida.</p>
+    {% endif %}
+    {% if kind == 'movies' %}
+    {{ watched_button(request.args.get('id'), record.watched, sync_csrf, filters) }}
+    {{ banned_button(request.args.get('id'), record.banned, sync_csrf, filters) }}
+    {% endif %}
+  </aside>
+  <section class="col-12 col-md-8 col-lg-9" aria-label="Detalles del registro">
+    <header class="d-flex align-items-start justify-content-between gap-3 mb-3">
+      <h1 class="text-break mb-0">{{ record.name }}</h1>
+      <a id="back-button" class="btn btn-outline-secondary icon-button flex-shrink-0" href="{{ back_url or url_for('listing', kind='movies') }}" aria-label="Atrás" title="Atrás"><span aria-hidden="true">←</span></a>
+    </header>
+    <div id="content-labels" aria-live="polite">
+      {% with tmdb=content_metadata %}{% include "content_labels.html" %}{% endwith %}
+    </div>
+<div class="table-responsive rounded border mb-4">
+  <table class="table mb-0">
+    <tbody>
+      {% for key, value in fields %}
+      <tr><th scope="row" data-field="{{ key }}">{{ field_labels.get(key, key.replace("_", " ").capitalize()) }}</th><td>
+        {% if key in people %}
+          {% for name in people[key] %}<a class="person-link" href="{{ url_for('person_results', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+        {% elif key in category_links %}
+          {% for category_id, name in category_links[key] %}<a class="category-link" href="{{ url_for(category_endpoint, kind=kind, foreign=category_foreign, category=category_id) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+        {% elif key == 'youtube_trailer' and trailer_url %}
+          {{ trailer_link({'name': record.name, 'trailer_url': trailer_url}) }}
+        {% else %}<pre class="detail-value mb-0">{{ value }}</pre>{% endif %}
+      </td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+    {% if kind in ['movies', 'series'] %}
+    <div id="tmdb-section" class="border rounded p-3 my-4" role="region"
+             aria-label="Información de TMDB"
+             data-endpoint="{{ url_for('tmdb_enrichment', kind=kind, record_id=request.args.get('id')) }}"
+             data-csrf="{{ session.get('tmdb_csrf', '') }}">
+      <h2 class="h4">Información de TMDB</h2>
+      <div id="tmdb-content" aria-live="polite"><p>Consultando TMDB…</p></div>
+      <p id="tmdb-error" class="alert alert-warning" role="alert" hidden></p>
+      <button id="tmdb-refresh" class="btn btn-outline-secondary" type="button">Actualizar TMDB</button>
+      <noscript><p>Activa JavaScript para consultar la información complementaria.</p></noscript>
+      <div class="small text-muted mt-3">
+        <h3 class="h6">Créditos y fuentes</h3>
+        <a href="https://www.themoviedb.org/" target="_blank" rel="noopener noreferrer"><img src="{{ url_for('static', filename='tmdb-logo.svg') }}" width="100" alt="TMDB"></a>
+        <p class="mt-2 mb-1">This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
+        <p class="mb-0">Disponibilidad proporcionada por <a href="https://www.justwatch.com/" target="_blank" rel="noopener noreferrer">JustWatch</a>. Puede estar incompleta o desactualizada.</p>
+      </div>
+    </div>
+    {% endif %}
+    {% for url in backdrop_urls %}
+    <figure class="mt-4 mb-0" data-original-backdrop>
+      <img src="{{ url }}" alt="Imagen de fondo {{ loop.index }} de {{ record.name }}"
+           data-error-id="backdrop-error-{{ loop.index }}" class="detail-backdrop rounded border bg-body-tertiary"
+           referrerpolicy="no-referrer">
+      <p id="backdrop-error-{{ loop.index }}" class="alert alert-secondary mt-2" role="status" hidden>No se pudo cargar la imagen de fondo {{ loop.index }}.</p>
+    </figure>
+    {% endfor %}
+  </section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='detail.js') }}" defer></script>
+<script src="{{ url_for('static', filename='tmdb.js') }}" defer></script>
+{% endblock %}

@@ -1,0 +1,57 @@
+{% from "watched.html" import watched_button %}
+{% macro cards(result, kind, filters) %}
+<div class="catalog-grid">
+  {% for item in result['items'] %}
+  <article class="catalog-card border rounded bg-body overflow-hidden">
+    <a class="poster-link" href="{{ url_for('detail', kind=kind, id=item.id, **filters) }}" aria-label="Ver ficha de {{ item.name }}">
+      {% if item.poster_url %}
+      <img class="catalog-poster" src="{{ item.poster_url }}" alt="Portada de {{ item.name }}" loading="lazy" referrerpolicy="no-referrer">
+      <span class="poster-placeholder" hidden>No se pudo cargar la portada.</span>
+      {% else %}
+      <span class="poster-placeholder">Sin portada</span>
+      {% endif %}
+    </a>
+    <div class="p-3">
+      <h2 class="h6 mb-2"><a class="text-body text-decoration-none" href="{{ url_for('detail', kind=kind, id=item.id, **filters) }}">{{ item.name }}</a></h2>
+      <p class="small text-muted mb-1">{{ item.year or '—' }} · {{ item.category_name }}</p>
+      <div class="d-flex align-items-center justify-content-between">
+        <span class="small">TMDB: {{ item.rating|string + '/10' if item.rating is not none else '—' }}</span>
+      </div>
+      {% if kind == 'movies' %}
+      {{ watched_button(item.id, item.watched, sync_csrf, filters) }}
+      {% endif %}
+      {% if filters.get('my_services') == 1 and item.service_icons %}
+      <div class="card-services d-flex flex-wrap gap-2 mt-2" aria-label="Disponible en mis servicios">
+        {% for service in item.service_icons %}
+        <span class="d-inline-flex align-items-center" title="{{ service.name }}">
+          {% if service.filename %}
+          <img class="card-service-logo rounded" src="{{ url_for('static', filename=service.filename) }}" width="24" height="24" alt="{{ service.name }}" loading="lazy">
+          <span class="small" hidden>{{ service.name }} (icono no disponible)</span>
+          {% else %}
+          <span class="badge text-bg-secondary text-wrap">{{ service.name }}</span>
+          {% endif %}
+        </span>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+  </article>
+  {% else %}
+  <p class="text-muted">No hay resultados. Cambia los filtros o sincroniza el catálogo.</p>
+  {% endfor %}
+</div>
+{% endmacro %}
+{% macro pager(result, links, compact=false) %}
+{% if result.total %}
+<nav class="card-pagination d-flex flex-wrap align-items-center gap-2 {{ 'ms-auto' if compact else 'my-4' }}" aria-label="Páginas del catálogo">
+  <span class="text-muted me-2">Página {{ result.page }} de {{ result.pages }}{% if not compact %} · {{ result.total }} resultados{% endif %}</span>
+  {% for link in links %}
+    {% if link.url %}
+    <a class="btn btn-sm {{ 'btn-primary' if link.current else 'btn-outline-secondary' }}" href="{{ link.url }}" {% if link.current %}aria-current="page"{% endif %}>{{ link.label }}</a>
+    {% else %}
+    <span class="btn btn-sm btn-outline-secondary disabled" aria-disabled="true">{{ link.label }}</span>
+    {% endif %}
+  {% endfor %}
+</nav>
+{% endif %}
+{% endmacro %}

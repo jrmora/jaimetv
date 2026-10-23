@@ -1,0 +1,144 @@
+{% extends "base.html" %}
+{% block title %}{{ title }} · Catálogo IPTV{% endblock %}
+{% block page_heading %}{{ title }}{% endblock %}
+{% block content %}
+{% if kids %}
+<div class="d-flex gap-3 mb-3">
+  {% for tab_kind, label in labels.items() %}
+  <a href="{{ url_for('kids_listing', kind=tab_kind) }}" {% if kind == tab_kind %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+{% if filters.foreign %}
+<div class="d-flex gap-3 mb-3">
+  <a href="{{ url_for('listing', kind='movies', foreign=1) }}" {% if kind == 'movies' %}aria-current="page"{% endif %}>Películas</a>
+  <a href="{{ url_for('listing', kind='series', foreign=1) }}" {% if kind == 'series' %}aria-current="page"{% endif %}>Series</a>
+</div>
+{% endif %}
+<div class="catalog-layout mt-4">
+<aside class="catalog-sidebar border rounded bg-body-tertiary p-3" aria-label="Filtros del catálogo">
+<h2 class="h5 mb-3">Filtros</h2>
+<form id="filters" method="get" class="d-flex flex-column gap-3" data-endpoint="{{ url_for('catalog_api', kind=kind) }}">
+  <input type="hidden" name="foreign" value="{{ filters.foreign }}">
+  <input type="hidden" name="page" value="{{ filters.page }}">
+  <input type="hidden" name="view" value="cards">
+  {% if kind == 'movies' %}
+  {% if filters.get('banned') == 'only' %}
+  <input type="hidden" name="banned" value="only">
+  {% endif %}
+  <fieldset>
+    <legend class="fs-6">Muéstrame</legend>
+    {% for value, label in [('all', 'Todo'), ('unseen', 'Películas que no he visto'), ('seen', 'Volver a ver')] %}
+    <div class="form-check">
+      <input class="form-check-input" type="radio" name="watched" id="watched-{{ value }}" value="{{ value }}" {% if filters.get('watched', 'unseen') == value %}checked{% endif %}>
+      <label class="form-check-label" for="watched-{{ value }}">{{ label }}</label>
+    </div>
+    {% endfor %}
+  </fieldset>
+  <fieldset class="filter-chips">
+    <legend class="fs-6">Época</legend>
+    {% for value, labels in movie_eras.items() %}
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="era" id="era-{{ value }}" value="{{ value }}" {% if value in filters.get('era', []) %}checked{% endif %}>
+      <label class="form-check-label" for="era-{{ value }}">{{ labels[0] }}{% if labels[1] %} <span class="small text-muted">({{ labels[1] }})</span>{% endif %}</label>
+    </div>
+    {% endfor %}
+  </fieldset>
+  {% endif %}
+  <div>
+    <label for="sort-by" class="form-label">Ordenar por</label>
+    <select id="sort-by" name="sort_by" class="form-select">
+      {% for column, label in [('name', 'Nombre'), ('category_name', 'Categoría'), ('year', 'Año'), ('rating', 'Valoración')] %}
+      <option value="{{ column }}" {% if filters.sort_by == column %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% if kids %}
+  <input type="hidden" name="children" value="only">
+  {% else %}
+  <div>
+    <input type="hidden" name="children" value="exclude">
+    <div class="form-check form-switch">
+      <input class="form-check-input" type="checkbox" role="switch" id="children-toggle" name="children" value="all" {% if filters.children == 'all' %}checked{% endif %}>
+      <label class="form-check-label" for="children-toggle">Mostrar contenido infantil</label>
+    </div>
+  </div>
+  {% endif %}
+  {% if kind in ['movies', 'series'] %}
+  {% include "provider_filter.html" %}
+  {% endif %}
+  <div>
+    <label for="q" class="form-label">Buscar por nombre</label>
+    <input id="q" name="q" type="search" class="form-control" maxlength="200" value="{{ filters.q }}" placeholder="Escribe para buscar…" autocomplete="off">
+  </div>
+  <fieldset class="filter-chips">
+    <legend class="fs-6">Categorías</legend>
+    <p class="small text-muted mb-2">Sin selección: todas. Puedes marcar varias.</p>
+    <div class="d-flex flex-wrap gap-2">
+      <input class="btn-check" type="checkbox" id="category-none" name="category" value="__uncategorized__" {% if '__uncategorized__' in selected_categories %}checked{% endif %}>
+      <label class="btn btn-outline-secondary rounded-pill" for="category-none">Sin categoría</label>
+      {% for item in categories %}
+      {% set child_category = item.category_id in children_category_ids %}
+      <input class="btn-check" type="checkbox" id="category-{{ loop.index }}" name="category" value="{{ item.category_id }}" {% if item.category_id in selected_categories %}checked{% endif %}{% if child_category %} data-children-category{% endif %}{% if child_category and filters.children == 'exclude' %} disabled{% endif %}>
+      <label class="btn btn-outline-secondary rounded-pill" for="category-{{ loop.index }}" {% if child_category and filters.children == 'exclude' %}hidden{% endif %}>{{ item.category_name }}</label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  {% if genres %}
+  <fieldset class="filter-chips">
+    <legend class="fs-6">Géneros</legend>
+    <p class="small text-muted mb-2">Géneros del proveedor. Sin selección: todos.</p>
+    <div class="d-flex flex-wrap gap-2">
+      {% for genre in genres %}
+      <input class="btn-check" type="checkbox" id="genre-{{ loop.index }}" name="genre" value="{{ genre }}" {% if genre in filters.genre %}checked{% endif %}>
+      <label class="btn btn-outline-secondary rounded-pill" for="genre-{{ loop.index }}">{{ genre }}</label>
+      {% endfor %}
+    </div>
+  </fieldset>
+  {% endif %}
+  <div>
+    <label for="sort" class="form-label">Orden</label>
+    <select id="sort" name="sort" class="form-select">
+      <option value="asc" {% if filters.sort == 'asc' %}selected{% endif %}>Ascendente</option>
+      <option value="desc" {% if filters.sort == 'desc' %}selected{% endif %}>Descendente</option>
+    </select>
+  </div>
+  {% if kind in ['movies', 'series'] %}
+  <div>
+    <label for="actor" class="form-label">Actor / actriz</label>
+    <input id="actor" name="actor" type="search" class="form-control" maxlength="200" value="{{ filters.actor }}" placeholder="Parte del nombre, por ejemplo: Willis" autocomplete="off">
+  </div>
+  <div>
+    <label for="director" class="form-label">Director / directora</label>
+    <input id="director" name="director" type="search" class="form-control" maxlength="200" value="{{ filters.director }}" placeholder="Parte del nombre, por ejemplo: Gilliam" autocomplete="off">
+  </div>
+  {% endif %}
+  <div class="d-flex flex-wrap gap-2">
+    <button class="btn btn-primary" type="submit">Buscar</button>
+    <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view) }}">Limpiar</a>
+  </div>
+</form>
+{% if kind in ['movies', 'series'] %}
+<form id="tmdb-batch-controls"></form>
+{% endif %}
+<section class="border-top mt-3 pt-3" aria-label="Filtros TMDB">
+  <h2 class="h6">Filtros TMDB</h2>
+  <div class="d-flex flex-column gap-2">
+    <a href="https://www.themoviedb.org/movie?discover_preset=new-on-netflix" target="_blank" rel="noopener noreferrer">Nuevo en Netflix</a>
+    <a href="https://www.themoviedb.org/movie?discover_preset=new-on-prime" target="_blank" rel="noopener noreferrer">Nuevo en Prime</a>
+  </div>
+</section>
+</aside>
+<section class="catalog-content" aria-label="Resultados del catálogo">
+<div id="error" class="alert alert-danger mt-3" role="alert" hidden></div>
+<div id="card-results">
+  {% include "cards.html" %}
+</div>
+</section>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='cards.js') }}" defer></script>
+<script src="{{ url_for('static', filename='catalog.js') }}" defer></script>
+<script src="{{ url_for('static', filename='providers.js') }}" defer></script>
+{% endblock %}
