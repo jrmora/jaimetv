@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
-from flask import Flask, abort, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
 
 from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image
 from xtream import CatalogError, XtreamClient
@@ -19,6 +19,7 @@ from provider_logos import provider_icons
 from tmdb_jobs import TMDBBatch
 from platforms import ordered_platforms
 from auth import configure_auth
+from updater import read_state, write_state
 
 
 LABELS = {"movies": "Películas", "series": "Series", "channels": "Canales"}
@@ -35,6 +36,54 @@ def create_app(db_path=None):
     sync_state = {"status": "idle"}
     tmdb_batch = TMDBBatch(store, app.logger)
     app.config["TMDB_BATCH"] = tmdb_batch
+    update_directory = os.environ.get("IPTV_UPDATE_STATE")
+    app.config["UPDATE_ENABLED"] = bool(update_directory and app.config["AUTH_ENABLED"])
+    update_lock = threading.RLock()
+
+    def update_status():
+        try:
+            return read_state(Path(update_directory))
+        except (OSError, ValueError):
+            app.logger.error("No se pudo leer el estado de actualización.")
+            abort(503, description="No se pudo consultar la actualización.")
+
+    @app.before_request
+    def pause_writes_during_update():
+        if app.config["UPDATE_ENABLED"] and request.method == "POST":
+            update_lock.acquire()
+            g.update_locked = True
+        if app.config["UPDATE_ENABLED"] and request.endpoint not in {"application_update", "static", "login"}:
+            if update_status()["status"] == "running":
+                response = jsonify(error="Actualización en curso. Espera a que termine.")
+                response.headers["Retry-After"] = "3"
+                return response, 503
+
+    @app.teardown_request
+    def release_update_lock(error):
+        if g.pop("update_locked", False):
+            update_lock.release()
+
+    @app.route("/api/application-update", methods=["GET", "POST"])
+    def application_update():
+        if not app.config["UPDATE_ENABLED"]:
+            abort(404)
+        if request.method == "GET":
+            return jsonify(update_status())
+        check_sync_csrf()
+        with update_lock, sync_lock:
+            if update_status()["status"] == "running":
+                return jsonify(error="Ya hay una actualización en curso."), 409
+            if sync_state["status"] == "running" or tmdb_batch.status()["status"] == "running":
+                return jsonify(error="Espera a que termine la sincronización o el lote TMDB antes de actualizar."), 409
+            directory = Path(update_directory)
+            try:
+                write_state(directory, status="running", message="Iniciando actualización.")
+                (directory / "request").write_text(secrets.token_hex(16))
+            except OSError:
+                app.logger.error("No se pudo iniciar el servicio de actualización.")
+                write_state(directory, status="failed", message="No se pudo iniciar la actualización.")
+                return jsonify(error="No se pudo iniciar la actualización. Revisa el servicio de Oracle."), 503
+        return jsonify(status="running", message="Actualizando aplicación."), 202
 
     def check_sync_csrf():
         token = request.form.get("csrf", "")

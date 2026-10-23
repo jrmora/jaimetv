@@ -1,0 +1,9 @@
+[Unit]
+Description=Escuchar solicitudes de actualización de JaimeTV
+
+[Path]
+PathChanged=/home/ubuntu/.local/state/jaimetv-update/request
+Unit=jaimetv-update.service
+
+[Install]
+WantedBy=multi-user.target

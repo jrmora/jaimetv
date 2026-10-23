@@ -26,6 +26,10 @@
               data-endpoint="{{ url_for('catalog_sync') }}" data-csrf="{{ sync_csrf }}" hidden>Sincronizar catálogo</button>
       {% endif %}
       {% if config.AUTH_ENABLED and auth_logged_in %}
+      {% if config.UPDATE_ENABLED %}
+      <button id="application-update" type="button" class="btn btn-outline-primary"
+              data-endpoint="{{ url_for('application_update') }}" data-csrf="{{ sync_csrf }}">Actualizar aplicación</button>
+      {% endif %}
       <form method="post" action="{{ url_for('logout') }}">
         <input type="hidden" name="csrf" value="{{ sync_csrf }}">
         <button class="btn btn-outline-secondary" type="submit">Cerrar sesión</button>
@@ -36,6 +40,7 @@
   </nav>
   <div id="theme-warning" class="container mt-3 text-warning-emphasis" role="status" hidden></div>
   <div id="sync-status" class="container mt-3" role="status" aria-live="polite" hidden></div>
+  <div id="update-status" class="container mt-3" role="status" aria-live="polite" hidden></div>
   <main class="container py-4">
     {% block back_navigation %}
     <header class="d-flex align-items-start justify-content-between gap-3 mb-3">
@@ -48,6 +53,9 @@
   <script src="{{ url_for('static', filename='navigation.js') }}" defer></script>
   <script src="{{ url_for('static', filename='sync.js') }}" defer></script>
   <script src="{{ url_for('static', filename='watched.js') }}" defer></script>
+  {% if config.UPDATE_ENABLED and auth_logged_in %}
+  <script src="{{ url_for('static', filename='update.js') }}" defer></script>
+  {% endif %}
   {% block scripts %}{% endblock %}
 </body>
 </html>

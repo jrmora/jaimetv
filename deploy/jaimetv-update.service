@@ -1,0 +1,16 @@
+[Unit]
+Description=Actualizar JaimeTV desde GitHub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/jaimetv-repo
+Environment=IPTV_UPDATE_REPO=/home/ubuntu/jaimetv-repo
+Environment=IPTV_UPDATE_TARGET=/home/ubuntu/catalogo-iptv
+Environment=IPTV_UPDATE_STATE=/home/ubuntu/.local/state/jaimetv-update
+ExecStart=/home/ubuntu/catalogo-iptv/.venv/bin/python /home/ubuntu/jaimetv-repo/updater.py
+TimeoutStartSec=3600
+UMask=0077

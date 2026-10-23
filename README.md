@@ -598,6 +598,72 @@ y que la contraseña permite acceder. No publiques una configuración sin
 `IPTV_AUTH_PATH` válido. Tras un reinicio, las páginas antiguas pueden necesitar
 recargarse para renovar su token CSRF.
 
+## Actualizar desde la propia web (Oracle)
+
+El botón **Actualizar aplicación** busca `origin/main` e instala directamente,
+sin pedir otra confirmación. Solo aparece con autenticación y `IPTV_UPDATE_STATE`
+configurados. No hay publicación automática al hacer push.
+Requiere el repositorio `/home/ubuntu/jaimetv-repo`, con su clave GitHub de solo
+lectura ya configurada, y la aplicación en `/home/ubuntu/catalogo-iptv`.
+
+Instalación inicial en Oracle (después de desplegar esta versión):
+
+```bash
+mkdir -p -m 700 /home/ubuntu/.local/state/jaimetv-update
+sudo install -m 644 /home/ubuntu/jaimetv-repo/deploy/jaimetv-update.service /etc/systemd/system/jaimetv-update.service
+sudo install -m 644 /home/ubuntu/jaimetv-repo/deploy/jaimetv-update.path /etc/systemd/system/jaimetv-update.path
+sudo visudo -cf /home/ubuntu/jaimetv-repo/deploy/jaimetv-update.sudoers
+sudo install -m 440 /home/ubuntu/jaimetv-repo/deploy/jaimetv-update.sudoers /etc/sudoers.d/jaimetv-update
+sudo systemctl edit catalogo-iptv
+```
+
+En el override, conserva `IPTV_AUTH_PATH` y añade:
+
+```ini
+[Service]
+Environment=IPTV_UPDATE_STATE=/home/ubuntu/.local/state/jaimetv-update
+```
+
+Después ejecuta `sudo systemctl daemon-reload` y
+`sudo systemctl enable --now jaimetv-update.path`, y
+`sudo systemctl restart catalogo-iptv`. La unidad path escucha un archivo de solicitud
+escrito por la aplicación; el proceso web conserva `NoNewPrivileges=true` y no
+ejecuta sudo. El servicio de actualización solo se inicia mediante la solicitud.
+
+El trabajo se ejecuta fuera de Gunicorn para sobrevivir a su reinicio.
+Primero descarga el código, prepara dependencias en un entorno temporal y ejecuta
+las pruebas de autenticación, actualización, sincronización y estados personales.
+Si fallan, no cambia la aplicación instalada. La suite completa sigue disponible
+para desarrollo; no se usa como puerta de despliegue mientras haya aserciones
+antiguas de interfaz pendientes de actualizar.
+No admite cambios locales en el repositorio de despliegue ni archivos privados
+versionados. Conserva `services.json`, configuraciones locales y base de datos.
+Si hay sincronización o lote TMDB activo, rechaza la petición con un mensaje
+para reintentarlo después. Durante la instalación bloquea otras acciones web.
+
+Antes de instalar detiene el servicio y guarda código reemplazado, snapshot SQLite,
+configuraciones y versiones de dependencias en subcarpetas `backup-*` del directorio
+privado de estado. Instala las dependencias, reinicia y comprueba `/login`.
+Si la activación falla, intenta restaurar código, datos y versiones anteriores;
+un fallo de restauración también se comunica como error y requiere intervención.
+Las copias se conservan: controla periódicamente el espacio libre y realiza además
+copias externas. Tras la primera actualización se conserva un manifiesto para
+retirar archivos que desaparezcan de Git en versiones posteriores. Los archivos
+antiguos anteriores a esa primera actualización no se eliminan sin inventario.
+Las migraciones especiales requieren despliegue manual; no sustituye un sistema
+de releases atómicas.
+
+El estado persiste en `status.json`; consulta fallos con:
+
+```bash
+sudo journalctl -u jaimetv-update --no-pager -n 50
+```
+
+Tras un reinicio inesperado durante la actualización, comprueba el servicio y
+el registro antes de reintentar; no borres un estado `running` sin verificar
+que `jaimetv-update` está inactivo. Las actualizaciones pueden interrumpir una
+consulta individual; no pulses el botón durante operaciones que quieras conservar.
+
 ## Pruebas
 
 ```bash

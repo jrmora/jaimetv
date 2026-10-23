@@ -1,0 +1,3 @@
+ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl stop catalogo-iptv
+ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl start catalogo-iptv
+ubuntu ALL=(root) NOPASSWD: /usr/bin/systemctl restart catalogo-iptv
