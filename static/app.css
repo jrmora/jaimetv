@@ -53,6 +53,7 @@ td { overflow-wrap: anywhere; }
 .score-value { position: absolute; inset: 0; display: grid; place-items: center; font-size: 1.3rem; font-weight: 700; }
 .trailer-icon { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; border-radius: 0.25rem; }
 .trailer-icon:hover { background-color: var(--bs-tertiary-bg); }
+.trailer-frame iframe { display: block; width: 100%; aspect-ratio: 16 / 9; min-height: 200px; border: 0; }
 .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); gap: 1rem; }
 .catalog-card { border-top: 0; }
 .poster-link { display: block; text-decoration: none; }

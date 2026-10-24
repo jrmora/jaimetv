@@ -557,8 +557,11 @@ def create_app(db_path=None):
                 response.headers["Retry-After"] = str(exc.retry_after)
                 return response, 429
             return jsonify(error=str(exc)), 502
+        trailer = data.get("trailer_url")
+        trailer_match = re.fullmatch(r"https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})", trailer) if isinstance(trailer, str) else None
         return jsonify(content_labels=render_template("content_labels.html", tmdb=data), html=render_template(
             "tmdb.html", tmdb=data, provider_icons=provider_icons(data.get("providers", {})),
+            trailer_id=trailer_match.group(1) if trailer_match else None,
         ))
 
     @app.get("/api/tmdb/<kind>/<record_id>/recommendations")
@@ -627,7 +630,8 @@ def create_app(db_path=None):
         image_sources = " http: https:" if request.endpoint in {"detail", "listing", "kids_listing", "person_results"} else ""
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; style-src 'self' https://cdn.jsdelivr.net; "
-            f"script-src 'self'; img-src 'self' data:{image_sources}; base-uri 'none'; frame-ancestors 'none'"
+            f"script-src 'self'; img-src 'self' data:{image_sources}; "
+            "frame-src https://www.youtube-nocookie.com; base-uri 'none'; frame-ancestors 'none'"
         )
         return response
 

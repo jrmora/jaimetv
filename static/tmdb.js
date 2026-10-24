@@ -87,6 +87,32 @@
   }
   refresh.addEventListener("click", () => load(true));
   content.addEventListener("click", (event) => {
+    const play = event.target.closest(".trailer-play");
+    if (play) {
+      const player = play.closest(".trailer-player");
+      const id = player.dataset.videoId;
+      if (!/^[A-Za-z0-9_-]{11}$/.test(id)) {
+        errorBox.textContent = "El identificador del tráiler no es válido.";
+        errorBox.hidden = false;
+        return;
+      }
+      const container = player.querySelector(".trailer-frame");
+      const opening = container.hidden;
+      container.replaceChildren();
+      container.hidden = !opening;
+      play.setAttribute("aria-expanded", String(opening));
+      play.textContent = opening ? "Cerrar tráiler" : "Ver tráiler";
+      if (opening) {
+        const frame = document.createElement("iframe");
+        frame.src = `https://www.youtube-nocookie.com/embed/${id}`;
+        frame.title = "Reproductor de tráiler de YouTube";
+        frame.allow = "encrypted-media; fullscreen; picture-in-picture";
+        frame.allowFullscreen = true;
+        frame.referrerPolicy = "strict-origin-when-cross-origin";
+        container.append(frame);
+      }
+      return;
+    }
     const candidate = event.target.closest(".tmdb-candidate");
     if (candidate) load(true, candidate.dataset.id);
   });

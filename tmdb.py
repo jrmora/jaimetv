@@ -254,12 +254,21 @@ class TMDBClient:
         media = "movie" if kind == "movies" else "tv"
         data = self.get(f"{media}/{tmdb_id}", {
             "language": "es-ES", "append_to_response": "credits,videos,watch/providers,external_ids,keywords",
+            "include_video_language": "es,en,null",
         })
         credits = data.get("credits", {})
         providers = data.get("watch/providers", {}).get("results", {}).get(COUNTRY, {})
         videos = data.get("videos", {}).get("results", [])
         trailers = [v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Trailer" and youtube_trailer_url(v.get("key"))]
-        trailers.sort(key=lambda v: not v.get("official", False))
+        trailers.sort(key=lambda v: (v.get("iso_639_1") not in {"es", None}, not v.get("official", False)))
+        if not trailers:
+            response = self.get(f"{media}/{tmdb_id}/videos", {"language": "en-US"})
+            videos = response.get("results")
+            if not isinstance(videos, list):
+                raise TMDBError("TMDB devolvió una lista de vídeos inválida.")
+            trailers = [v for v in videos if isinstance(v, dict) and v.get("site") == "YouTube"
+                        and v.get("type") == "Trailer" and youtube_trailer_url(v.get("key"))]
+            trailers.sort(key=lambda v: not v.get("official", False))
         trailer = trailers[0] if trailers else None
         backdrop = data.get("backdrop_path")
         backdrop_url = None

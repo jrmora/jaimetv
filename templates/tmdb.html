@@ -62,7 +62,14 @@
   {% endfor %}
   {% if tmdb.cast %}<tr class="tmdb-wide-row" data-replaces-field="cast"><th scope="row">Reparto y personajes</th><td><ul class="mb-0">{% for person in tmdb.cast %}<li><a class="person-link" href="{{ url_for('person_results', name=person.name) }}">{{ person.name }}</a>{% if person.character %} — {{ person.character }}{% endif %}</li>{% endfor %}</ul></td></tr>{% endif %}
   {% if tmdb.imdb_id and tmdb.imdb_id.startswith('tt') and tmdb.imdb_id[2:].isdigit() %}<tr><th scope="row">IMDb</th><td><a href="https://www.imdb.com/title/{{ tmdb.imdb_id }}/" target="_blank" rel="noopener noreferrer">{{ tmdb.imdb_id }}</a></td></tr>{% endif %}
-  {% if tmdb.trailer_url %}<tr data-replaces-field="youtube_trailer"><th scope="row">Tráiler TMDB</th><td>{{ trailer_link({'name': tmdb.title, 'trailer_url': tmdb.trailer_url}) }}{% if not tmdb.trailer_official %}<span class="small text-muted">No marcado como oficial</span>{% endif %}</td></tr>{% endif %}
+  {% if trailer_id %}<tr class="tmdb-wide-row" data-replaces-field="youtube_trailer"><th scope="row">Tráiler</th><td>
+    <div class="trailer-player" data-video-id="{{ trailer_id }}">
+      <button type="button" class="btn btn-outline-primary trailer-play" aria-expanded="false">Ver tráiler</button>
+      <div class="trailer-frame mt-2" hidden></div>
+      <p class="small text-muted mt-2 mb-0">Si no se reproduce aquí, <a href="https://www.youtube.com/watch?v={{ trailer_id }}" target="_blank" rel="noopener noreferrer">ver en YouTube</a>. Puede contener publicidad.</p>
+    </div>
+    {% if not tmdb.trailer_official %}<span class="small text-muted">No marcado como oficial</span>{% endif %}
+  </td></tr>{% endif %}
 </tbody></table>
 </div>
 <h3 class="h5">Dónde verla en Canadá</h3>

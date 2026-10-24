@@ -146,6 +146,16 @@ ocupa todo el ancho, sin mantener una columna vacía debajo de la portada.
 La disponibilidad en Canadá solo muestra modalidades con plataformas conocidas,
 en grupos compactos con iconos. Si no hay ninguna, muestra un único aviso.
 
+«Ver tráiler» despliega un reproductor de YouTube dentro de la ficha. No se
+conecta con YouTube hasta pulsarlo; «Cerrar tráiler» retira el reproductor y
+detiene el vídeo. Se conserva un enlace externo por si el autor no permite
+reproducción integrada. El reproductor puede mostrar publicidad.
+Al consultar la ficha TMDB se priorizan tráileres en español y oficiales;
+también se incluyen vídeos en inglés y, si no aparece ninguno, se consulta el
+listado en inglés como alternativa. Las fichas ya guardadas no se vuelven a
+consultar automáticamente: si no tenían tráiler, pulsa «Actualizar TMDB» para
+probar la nueva selección. No se extraen vídeos de IMDb.
+
 Al final de la ficha aparece «También te podrían gustar», con hasta seis
 recomendaciones de TMDB que existen en el catálogo local del mismo tipo.
 Se conserva el orden recomendado por TMDB, sin duplicar versiones del mismo
