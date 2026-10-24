@@ -1,4 +1,5 @@
 import copy
+import json
 import re
 import tempfile
 import unittest
@@ -68,6 +69,34 @@ class TMDBFilterTests(unittest.TestCase):
             result = self.store.query("movies", q="not-present", children="only", sort_by="rating", page=1)
         self.assertEqual(result["total"], 0)
         self.assertLessEqual(len(calls), 12)
+
+    def test_rating_search_prepares_each_identity_and_people_only_once(self):
+        for record_id in ("10", "11", "12"):
+            self.cache(record_id=record_id)
+        original_connect = self.store.connect
+        identities, people = [], []
+
+        @contextmanager
+        def counted_connect():
+            with original_connect() as db:
+                def identity(raw):
+                    identities.append(raw)
+                    return fingerprint(json.loads(raw))
+
+                def names(raw, payload):
+                    people.append(payload)
+                    return effective_people(raw, payload)
+
+                db.create_function("TITLE_FINGERPRINT", 1, identity)
+                db.create_function("PEOPLE_METADATA", 2, names)
+                yield db
+
+        with patch.object(self.store, "connect", counted_connect):
+            result = self.store.query("movies", q="Actor TMDB", sort_by="rating", page=1)
+        self.assertEqual(result["total"], 3)
+        self.assertEqual(len(identities), 3)
+        self.assertEqual(len(people), 3)
+        self.assertIs(type(result["items"][0]["votes"]), int)
 
     def test_rating_order_weights_votes_without_changing_displayed_score(self):
         for kind, key in (("movies", "stream_id"), ("series", "series_id")):

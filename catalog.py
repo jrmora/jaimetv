@@ -222,6 +222,11 @@ class CatalogStore:
                 )
             """)
             db.execute("""
+                CREATE INDEX IF NOT EXISTS idx_tmdb_recommendation_id
+                ON tmdb_metadata(kind, country, json_extract(payload, '$.id'))
+                WHERE json_extract(payload, '$.status')='matched'
+            """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS sync_excluded_categories (
                     category_table TEXT NOT NULL,
                     category_id TEXT NOT NULL,
@@ -408,12 +413,15 @@ class CatalogStore:
 
     def recommended_titles(self, kind, tmdb_id, ids):
         table, _, key = KINDS[kind]
+        # CROSS JOIN keeps the small ID lists ahead of costly identity validation.
         banned = """AND json_extract(m.payload, '$.id') NOT IN (
             SELECT json_extract(blocked.payload, '$.id') FROM banned_movies b
-            JOIN tmdb_metadata blocked ON blocked.record_id=b.record_id
+            CROSS JOIN tmdb_metadata blocked
+            CROSS JOIN movies original
+            WHERE blocked.record_id=b.record_id
                 AND blocked.kind='movies' AND blocked.country='CA'
-            JOIN movies original ON original.stream_id=b.record_id
-            WHERE blocked.fingerprint=TITLE_FINGERPRINT(original.raw_json)
+                AND original.stream_id=b.record_id
+                AND blocked.fingerprint=TITLE_FINGERPRINT(original.raw_json)
                 AND json_extract(blocked.payload, '$.status')='matched'
                 AND json_type(blocked.payload, '$.id')='integer'
         )""" if kind == "movies" else ""
@@ -423,15 +431,16 @@ class CatalogStore:
                     EXISTS (SELECT 1 FROM watchlist saved WHERE saved.kind=m.kind
                         AND saved.record_id=s.{key}) AS watchlisted,
                     json_extract(m.payload, '$.id') AS tmdb_id
-                FROM {table} s JOIN tmdb_metadata m ON m.record_id=s.{key}
-                    AND m.kind=? AND m.country='CA'
+                FROM json_each(?) recommended
+                CROSS JOIN tmdb_metadata m
+                JOIN {table} s ON s.{key}=m.record_id
+                WHERE m.kind=? AND m.country='CA'
+                    AND json_extract(m.payload, '$.status')='matched'
+                    AND json_extract(m.payload, '$.id')=recommended.value
                     AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                JOIN json_each(?) recommended
-                    ON recommended.value=json_extract(m.payload, '$.id')
-                WHERE json_extract(m.payload, '$.status')='matched'
                     AND json_extract(m.payload, '$.id')!=? {banned}
                 ORDER BY CAST(recommended.key AS INTEGER), CASEFOLD(s.name), s.{key}
-            """, (kind, json.dumps(ids), tmdb_id)).fetchall()
+            """, (json.dumps(ids), kind, tmdb_id)).fetchall()
         items, seen = [], set()
         for row in rows:
             if row["tmdb_id"] in seen:
@@ -658,18 +667,20 @@ class CatalogStore:
         eras = era if isinstance(era, list) else ([era] if era else [])
         if any(value not in MOVIE_ERAS for value in eras) or (eras and kind != "movies"):
             raise ValueError("Época de películas inválida.")
-        tmdb_rating = """CASE WHEN
+        valid_rating = """CASE WHEN
             json_type(score.payload, '$.rating') IN ('integer', 'real')
             AND json_extract(score.payload, '$.rating') BETWEEN 0 AND 10
             AND json_type(score.payload, '$.votes') IN ('integer', 'real')
             AND json_extract(score.payload, '$.votes') > 0
             THEN json_extract(score.payload, '$.rating') END"""
-        votes = f"CASE WHEN ({tmdb_rating}) IS NOT NULL THEN json_extract(score.payload, '$.votes') END"
+        materialize_metadata = not watchlist and (sort_by == "rating" or any((q, actor, director, person)))
+        tmdb_rating = "score.rating" if materialize_metadata else valid_rating
+        votes = "score.votes" if materialize_metadata else f"CASE WHEN ({valid_rating}) IS NOT NULL THEN json_extract(score.payload, '$.votes') END"
         order = (
             f"(({tmdb_rating}) * ({votes}) + 100.0 * ?) / (({votes}) + 100.0)"
             if sort_by == "rating" else SORT_COLUMNS[sort_by]
         )
-        year = "RELEASE_YEAR(json_extract(score.payload, '$.release_date'))"
+        year = "score.year" if materialize_metadata else "RELEASE_YEAR(json_extract(score.payload, '$.release_date'))"
         genre_expression = "(SELECT group_concat(value, ', ') FROM json_each(score.payload, '$.genres'))"
         if sort_by == "year":
             order = year
@@ -710,7 +721,7 @@ class CatalogStore:
         watched_expression = "EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.stream_id)"
         if watched != "all":
             conditions.append(watched_expression if watched == "seen" else f"NOT {watched_expression}")
-        people_metadata = "PEOPLE_METADATA(NULL, score.payload)"
+        people_metadata = "COALESCE(score.people, '{}')" if materialize_metadata else "PEOPLE_METADATA(NULL, score.payload)"
         if q:
             escaped = q.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             expressions = (
@@ -787,12 +798,35 @@ class CatalogStore:
             params.extend((kind, access, access, *services))
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         source = f"{table} s LEFT JOIN {categories} c ON c.category_id = s.category_id"
-        source += f""" LEFT JOIN tmdb_metadata score
-            ON score.kind='{kind}' AND score.record_id=s.{key} AND score.country='CA'
-            AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-            AND json_extract(score.payload, '$.status')='matched'"""
+        if materialize_metadata:
+            source += f" LEFT JOIN query_metadata score ON score.record_id=s.{key}"
+        else:
+            source += f""" LEFT JOIN tmdb_metadata score
+                ON score.kind='{kind}' AND score.record_id=s.{key} AND score.country='CA'
+                AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json)
+                AND json_extract(score.payload, '$.status')='matched'"""
         watched_projection = f", {watched_expression} AS watched, {banned_expression} AS banned" if kind == "movies" else ""
         with self.connect() as db:
+            if materialize_metadata:
+                started = time.perf_counter()
+                db.execute("""CREATE TEMP TABLE query_metadata (
+                    record_id TEXT PRIMARY KEY, payload TEXT, rating,
+                    votes, year INTEGER, people TEXT
+                )""")
+                people = "PEOPLE_METADATA(NULL, score.payload)" if q or actor or director or person else "NULL"
+                if children != "all":
+                    people_condition = membership if children == "only" else f"NOT {membership}"
+                    people = f"CASE WHEN {people_condition} THEN {people} END"
+                db.execute(f"""INSERT INTO query_metadata
+                    SELECT score.record_id, score.payload, {valid_rating},
+                        CASE WHEN ({valid_rating}) IS NOT NULL THEN json_extract(score.payload, '$.votes') END,
+                        RELEASE_YEAR(json_extract(score.payload, '$.release_date')), {people}
+                    FROM tmdb_metadata score JOIN {table} s ON s.{key}=score.record_id
+                    WHERE score.kind=? AND score.country='CA'
+                        AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json)
+                        AND json_extract(score.payload, '$.status')='matched'
+                """, (kind,))
+                record_timing("prepare_metadata", started)
             total = None
             limit = ""
             provider_projection = ""

@@ -74,12 +74,26 @@ class AdministrationTests(unittest.TestCase):
         self.assertIsNotNone(reopened.maintenance_dates("movies")["platforms"])
         self.assertIsNone(reopened.maintenance_dates("series")["platforms"])
         page = self.client.get("/admin").get_data(as_text=True)
-        self.assertIn("2026-10-20 10:00:00 UTC", page)
-        self.assertIn("2026-10-21 11:00:00 UTC", page)
-        self.assertNotIn("2026-10-22 12:00:00 UTC", page)
+        self.assertIn("2026-10-20 06:00:00 EDT · Montreal", page)
+        self.assertIn("2026-10-21 07:00:00 EDT · Montreal", page)
+        self.assertNotIn("2026-10-22 08:00:00 EDT · Montreal", page)
         series = self.client.get("/admin?kind=series").get_data(as_text=True)
-        self.assertIn("2026-10-22 12:00:00 UTC", series)
+        self.assertIn("2026-10-22 08:00:00 EDT · Montreal", series)
         self.assertIn("Sin registro de actualizaci", series)
+
+    def test_montreal_dates_follow_daylight_saving_and_preserve_original_timestamp(self):
+        store = self.app.config["CATALOG_STORE"]
+        for timestamp, expected in (
+            ("2026-01-15T02:00:00+00:00", "2026-01-14 21:00:00 EST"),
+            ("2026-07-15T02:00:00+00:00", "2026-07-14 22:00:00 EDT"),
+        ):
+            with self.subTest(timestamp=timestamp):
+                with store.connect() as db:
+                    db.execute("INSERT OR REPLACE INTO sync_metadata VALUES (1, ?)", (timestamp,))
+                page = self.client.get("/admin").get_data(as_text=True)
+                self.assertIn(f"{expected} · Montreal", page)
+                self.assertIn(f'datetime="{timestamp}"', page)
+                self.assertEqual(store.maintenance_dates("movies")["catalog"], timestamp)
 
     def test_empty_database_does_not_invent_dates(self):
         self.assertEqual(self.app.config["CATALOG_STORE"].maintenance_dates("movies"), {

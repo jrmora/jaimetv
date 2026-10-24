@@ -195,7 +195,15 @@ Las respuestas de Flask incluyen `X-Request-ID` y `Server-Timing`, visibles
 en la pestaña Red del navegador. Se miden el tiempo total del servidor,
 el tiempo dentro de conexiones SQLite (`sqlite`), el cierre de
 transacciones (`commit`, incluida reversión en caso de error), y las fases de consulta `rating_mean`, `count`
-y `select_rows`. Cuando se consulta TMDB también aparecen `tmdb_wait`
+y `select_rows`. `prepare_metadata` mide la preparación de metadatos cuando
+hay búsqueda u orden por valoración: una tabla temporal privada de la conexión
+reutiliza identidad, valoración, año y personas entre las fases de consulta.
+Se elimina al cerrar la conexión, sin modificar el catálogo ni mantener una
+caché que pueda quedar desactualizada. Las consultas alfabéticas sin búsqueda
+y las listas personales conservan la ruta directa para evitar ese coste.
+Las recomendaciones usan un índice por ID TMDB antes de validar las identidades
+de los títulos candidatos, en vez de revisar todo el catálogo.
+Cuando se consulta TMDB también aparecen `tmdb_wait`
 (espera del limitador) y `tmdb_http` (petición externa). Las fases SQL están
 incluidas en `sqlite`, no se deben sumar a este para calcular el total.
 El tiempo total no incluye la espera anterior a la entrada en Flask,
@@ -547,7 +555,8 @@ Actualiza el navegador para ver los cambios. Para desactivar la recarga,
 ejecuta `python app.py serve --no-reload`.
 Esto solo afecta al servidor local; Oracle sigue ejecutándose con Gunicorn.
 
-Administración muestra las últimas fechas registradas en UTC para aplicación,
+Administración muestra las últimas fechas en horario del este de Montreal
+(EST/EDT, con cambio automático de horario de verano) para aplicación,
 sincronización IPTV, plataformas de Canadá y consultas TMDB (por catálogo).
 Las fechas persisten entre reinicios; las operaciones antiguas sin fecha
 registrada muestran «Sin registro de actualización». Un intento fallido no

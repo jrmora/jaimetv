@@ -5,7 +5,7 @@
 {% macro last_update(key, label) %}
 <p class="text-muted" id="last-update-{{ key }}">{{ label }}:
   {% if maintenance_dates[key] %}
-  <time datetime="{{ maintenance_dates[key] }}">{{ maintenance_dates[key].replace('T', ' ').replace('+00:00', '') }} UTC</time>
+  <time datetime="{{ maintenance_dates[key] }}">{{ maintenance_dates_display[key] }} · Montreal</time>
   {% else %}Sin registro de actualización{% endif %}
 </p>
 {% endmacro %}

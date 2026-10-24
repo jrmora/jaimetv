@@ -77,6 +77,30 @@ class RecommendationTests(unittest.TestCase):
             self.store.recommended_titles("movies", 1, list(range(1, 10)))
         self.assertLessEqual(len(calls), 20)
 
+    def test_recommendations_only_validate_id_matches_not_entire_catalog(self):
+        self.data["movies"].extend(
+            {"stream_id": number, "name": f"Title {number}"} for number in range(10, 110)
+        )
+        self.store.replace(self.data)
+        for number in range(10, 110):
+            self.cache("movies", str(number), number)
+        original_connect = self.store.connect
+        calls = []
+
+        @contextmanager
+        def counted_connect():
+            with original_connect() as db:
+                def identity(raw):
+                    calls.append(raw)
+                    return fingerprint(json.loads(raw))
+                db.create_function("TITLE_FINGERPRINT", 1, identity)
+                yield db
+
+        with patch.object(self.store, "connect", counted_connect):
+            items = self.store.recommended_titles("movies", 1, [3, 4])
+        self.assertEqual([item["id"] for item in items], ["3", "4"])
+        self.assertLessEqual(len(calls), 4)
+
     def test_expiration_empty_cache_and_failure(self):
         self.store.save_recommendations("movies", 1, [2], time.time() - 8 * 86400)
         self.remote.recommendations.side_effect = TMDBError("No disponible")

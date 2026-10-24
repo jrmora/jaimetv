@@ -10,6 +10,7 @@ import threading
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
@@ -375,6 +376,10 @@ def create_app(db_path=None):
             "admin.html", labels=LABELS, active="admin", kind=kind,
             coverages={value: store.tmdb_coverage(value) for value in ("movies", "series")},
             maintenance_dates=dates,
+            maintenance_dates_display={
+                key: datetime.fromisoformat(value).astimezone(ZoneInfo("America/Toronto")).strftime("%Y-%m-%d %H:%M:%S %Z")
+                for key, value in dates.items() if value
+            },
         )
 
     @app.get("/movies", defaults={"kind": "movies"})
