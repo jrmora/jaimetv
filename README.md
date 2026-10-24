@@ -181,6 +181,12 @@ La lista se guarda localmente en SQLite y se conserva durante las
 sincronizaciones. La búsqueda y los filtros también funcionan dentro de la
 lista; los títulos bloqueados siguen ocultos. No requiere llamadas a TMDB.
 
+SQLite usa WAL para que las lecturas del catálogo no bloqueen el guardado de
+preferencias, consultas TMDB o recomendaciones. Se activa al iniciar la
+aplicación, también para bases existentes, sin borrar datos. Para respaldar una
+base en uso se debe usar la API de backup de SQLite (como hace el actualizador),
+no copiar solo el archivo principal: puede haber cambios en archivos `-wal`.
+
 En Administración, «Ver películas bloqueadas» abre el catálogo de películas
 marcadas «No me interesa», con controles para desbloquearlas. No se añade un
 selector de bloqueadas al panel de filtros.

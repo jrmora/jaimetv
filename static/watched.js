@@ -27,6 +27,8 @@ document.addEventListener("submit", async (event) => {
     form.elements[state].value = enabled ? "0" : "1";
     const label = isWatchlist ? (enabled ? "Quitar de Mi lista" : "Quiero ver") : isBanned ? (enabled ? "Desbloquear" : "No me interesa") : (enabled ? "Vista" : "Ya la vi");
     if (button.dataset?.iconOnly !== "true") button.textContent = label;
+    const visibleLabel = button.querySelector?.(".detail-action-label");
+    if (visibleLabel) visibleLabel.textContent = label;
     button.setAttribute("aria-label", label);
     button.title = isWatchlist ? label : isBanned ? (enabled ? "Volver a mostrar esta película" : "Ocultar esta película del catálogo") : (enabled ? "Marcar como no vista" : "Marcar como vista");
     button.setAttribute("aria-pressed", String(enabled));

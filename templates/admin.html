@@ -27,10 +27,12 @@
     <div class="border rounded p-3 h-100">
       <h2 class="h5">Catálogo IPTV</h2>
       {{ last_update('catalog', 'Última sincronización completada') }}
-      <button id="catalog-sync" type="button" class="btn btn-outline-primary"
-              data-endpoint="{{ url_for('catalog_sync') }}" data-csrf="{{ sync_csrf }}" hidden>Sincronizar catálogo</button>
+      <div class="d-flex flex-wrap align-items-center gap-2">
+        <button id="catalog-sync" type="button" class="btn btn-outline-primary"
+                data-endpoint="{{ url_for('catalog_sync') }}" data-csrf="{{ sync_csrf }}" hidden>Sincronizar catálogo</button>
+        <a class="btn btn-outline-secondary" href="{{ url_for('listing', kind='movies', banned='only', children='all', watched='all') }}">Ver películas bloqueadas</a>
+      </div>
       <div id="sync-status" class="mt-3" role="status" aria-live="polite" hidden></div>
-      <a class="btn btn-outline-secondary mt-3" href="{{ url_for('listing', kind='movies', banned='only', children='all', watched='all') }}">Ver películas bloqueadas</a>
     </div>
   </section>
   <section class="col-12">

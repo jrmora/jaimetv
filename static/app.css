@@ -8,7 +8,10 @@ td { overflow-wrap: anywhere; }
 
 .detail-poster { display: block; width: 100%; max-width: 320px; height: auto; margin-inline: auto; }
 .detail-actions form { margin-top: 0 !important; }
-.detail-actions button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
+.detail-actions button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+@media (max-width: 599.98px) {
+  .detail-action-label { display: none; }
+}
 
 .icon-button, #theme-toggle { min-width: 44px; min-height: 44px; font-size: 1.25rem; }
 

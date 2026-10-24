@@ -149,6 +149,9 @@ class CatalogStore:
         self.duplicates = {}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as db:
+            mode = db.execute("PRAGMA journal_mode=WAL").fetchone()[0]
+            if mode != "wal":
+                raise sqlite3.OperationalError("No se pudo activar WAL para el catálogo SQLite.")
             for table in CATEGORY_TABLES:
                 db.execute(f"""
                     CREATE TABLE IF NOT EXISTS {table} (

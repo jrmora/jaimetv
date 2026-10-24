@@ -42,10 +42,10 @@
     {% endif %}
     <div class="detail-actions d-flex flex-wrap gap-2">
       {% if kind == 'movies' %}
-      {{ watched_button(request.args.get('id'), record.watched, sync_csrf, filters) }}
-      {{ banned_button(request.args.get('id'), record.banned, sync_csrf, filters) }}
+      {{ watched_button(request.args.get('id'), record.watched, sync_csrf, filters, icon_only=true, responsive=true) }}
+      {{ banned_button(request.args.get('id'), record.banned, sync_csrf, filters, icon_only=true, responsive=true) }}
       {% endif %}
-      {{ watchlist_button(kind, request.args.get('id'), record.watchlisted, sync_csrf) }}
+      {{ watchlist_button(kind, request.args.get('id'), record.watchlisted, sync_csrf, responsive=true) }}
     </div>
     {% if kind in ['movies', 'series'] %}
     <div id="tmdb-section" class="border rounded p-3 my-4" role="region"
