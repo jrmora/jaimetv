@@ -4,22 +4,20 @@
          data-csrf="{{ sync_csrf }}" data-kind="{{ kind }}">
   <summary class="fw-semibold p-2">Dónde se puede ver</summary>
   <div class="p-2 border-top">
-    <label for="provider-access" class="form-label small">Tipo de acceso</label>
-    <select id="provider-access" name="access" class="form-select form-select-sm mb-3">
-      {% for value, label in [('flatrate', 'Suscripción'), ('all', 'Cualquier modalidad'), ('rent', 'Alquiler'), ('buy', 'Compra'), ('free', 'Gratis'), ('ads', 'Con anuncios')] %}
-      <option value="{{ value }}" {% if filters.get('access', 'flatrate') == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-    <label class="form-label small" for="my-services-toggle">Mis plataformas</label>
-    <select class="form-select form-select-sm mb-2" id="my-services-toggle" name="my_services">
+    <input type="hidden" name="access" value="flatrate">
+    <fieldset class="mb-2">
+      <legend class="fs-6">Mis plataformas</legend>
+      <div class="d-flex gap-2">
       {% for value, label in [(0, 'Todas las plataformas'), (1, 'Solo mis servicios'), (2, 'Fuera de mis servicios')] %}
-      <option value="{{ value }}" {% if filters.get('my_services', 0) == value %}selected{% endif %}>{{ label }}</option>
+      <label class="small flex-fill d-flex align-items-start gap-1">
+        <input class="form-check-input flex-shrink-0" type="radio" name="my_services" value="{{ value }}" {% if filters.get('my_services', 0) == value %}checked{% endif %}>
+        <span>{{ label }}</span>
+      </label>
       {% endfor %}
-    </select>
+      </div>
+    </fieldset>
     <p id="saved-services" class="small text-muted">Mis servicios: {{ subscriptions|join(', ') or 'Ninguno guardado' }}</p>
     <p id="my-services-warning" class="small text-warning-emphasis" {% if filters.get('my_services') != 1 or subscriptions %}hidden{% endif %}>No tienes servicios en services.json. Selecciona todas las plataformas o actualiza el archivo.</p>
-    <label for="provider-search" class="form-label small">Buscar plataformas</label>
-    <input id="provider-search" type="search" class="form-control form-control-sm mb-2" placeholder="Netflix, Disney, Crave…" autocomplete="off">
     <div class="provider-options">
       {% for provider in provider_options %}
       <div class="provider-option" data-provider-name="{{ provider.name }}">
@@ -37,15 +35,6 @@
       <p class="small text-muted">Carga las plataformas desde Administración.</p>
       {% endfor %}
     </div>
-    <p id="provider-search-empty" class="small text-muted" hidden>No hay plataformas con ese nombre.</p>
     <p id="provider-message" class="small mt-2" role="status" aria-live="polite" hidden></p>
-  </div>
-  <div class="p-2 border-top">
-    <label for="tmdb-status" class="form-label small">Estado TMDB</label>
-    <select id="tmdb-status" name="tmdb_status" class="form-select form-select-sm mb-3">
-      {% for value, label in [('all', 'Todos'), ('candidates', 'Por elegir'), ('matched', 'Asociados'), ('missing', 'Sin coincidencia'), ('pending', 'Pendientes')] %}
-      <option value="{{ value }}" {% if filters.get('tmdb_status', 'all') == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
   </div>
 </details>

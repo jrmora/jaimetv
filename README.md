@@ -45,7 +45,7 @@ Solo se asigna automáticamente una coincidencia de título normalizado
 (traducido u original) y año exactos, sin otra coincidencia exacta rival.
 Si falta el año o hay dudas, se muestran candidatos para elegir manualmente.
 La ficha original aparece de inmediato; la consulta complementaria requiere
-JavaScript. Canales, listados, exportaciones y sincronización no consultan TMDB.
+JavaScript. Listados, exportaciones y sincronización no consultan TMDB.
 
 La sección añade sinopsis, géneros, reparto con personajes, dirección,
 idioma original, países, productoras, IMDb, valoración con número de votos,
@@ -73,7 +73,7 @@ no se muestran en la ficha. No se hacen consultas externas al ordenar.
 
 En los listados de películas y series (también Niños y Otros alfabetos) hay
 un panel desplegable con logos seleccionables, búsqueda de plataformas y
-país fijo **Canadá (CA)**. No se aplica a canales de TV. La búsqueda de logos
+país fijo **Canadá (CA)**. La búsqueda de logos
 solo filtra las opciones visibles: no desmarca plataformas ya seleccionadas.
 Varias plataformas se combinan con **O**, y con el resto de filtros con **Y**.
 Por defecto se consulta **Suscripción**; también puedes elegir alquiler,
@@ -124,20 +124,36 @@ candidatos, sin coincidencia y pendientes de **todo el catálogo de ese tipo**,
 no solo la página o selección actual. La disponibilidad guardada no se actualiza
 sola; puede cambiar y se puede refrescar desde la ficha.
 
-Las fichas ocultan las filas originales de sinopsis, género, estreno, duración,
-valoración, título alternativo y tráiler cuando TMDB muestra el dato correspondiente.
-Si falta un dato en TMDB, se mantiene el original. Esto solo cambia la
-visualización; no borra información de SQLite.
+Las fichas de películas y series muestran únicamente la tabla TMDB, no la
+tabla de metadatos del proveedor. El JSON original se conserva en SQLite.
+Los géneros TMDB son enlaces al catálogo local filtrado por ese género.
+La valoración destaca al principio de la información TMDB mediante un anillo
+porcentual, la nota sobre 10 y el número de votos. Sin votos o nota válida se
+indica que no hay valoración disponible, sin presentar un cero ficticio.
+En tablet y móvil, la ficha TMDB muestra los campos breves con etiqueta a la
+izquierda y valor a la derecha. Sinopsis, productoras y reparto usan todo el
+ancho debajo de su etiqueta.
+La portada y el título forman una cabecera compacta; el contenido posterior
+ocupa todo el ancho, sin mantener una columna vacía debajo de la portada.
+La disponibilidad en Canadá solo muestra modalidades con plataformas conocidas,
+en grupos compactos con iconos. Si no hay ninguna, muestra un único aviso.
 
-Los filtros de actor y director y los enlaces por persona usan primero el
+El buscador principal aparece sobre los filtros, siempre accesible aunque estén
+plegados. Un único texto busca por título del proveedor, título traducido u
+original TMDB, reparto, dirección y creadores (coincidencia en cualquiera).
+Se actualiza al escribir y se combina con los filtros seleccionados.
+No usa IA ni hace llamadas a TMDB; las personas solo se encuentran si su
+información ya está guardada. Las nuevas consultas TMDB se incorporan sin
+reconstruir índices. La API conserva `actor` y `director` para enlaces antiguos.
+
+Los filtros de actor y director y los enlaces por persona usan exclusivamente el
 reparto/dirección de una coincidencia TMDB confirmada y vigente de Canadá.
-Si falta reparto o dirección, ese campo usa los datos del proveedor.
+Si falta reparto o dirección TMDB, no se usan datos del proveedor como respaldo.
 Los nombres de reparto, dirección y creadores en TMDB son enlaces al catálogo
 local de películas y series; los personajes no se usan como nombres de actores.
 La búsqueda escrita permite partes del nombre; los enlaces buscan el nombre
 completo. Los creadores también aparecen en los resultados por persona, pero no
-se confunden con directores. Las filas originales de reparto y dirección se
-ocultan cuando TMDB muestra sus sustitutos. No se consulta TMDB al filtrar:
+se confunden con directores. No se consulta TMDB al filtrar:
 solo se pueden encontrar las personas ya guardadas en la caché local.
 
 #### Películas vistas
@@ -147,8 +163,8 @@ El filtro **Época** de películas permite combinar **Recientes**
 **Clásicas** (antes de 1980) y **Sin año conocido**. Sin selección incluye todas.
 Las épocas se combinan con O y con los demás filtros con Y, también con
 **Volver a ver**. Se aplica antes de contar y paginar.
-Usa el estreno de la caché TMDB confirmada y vigente de Canadá; si falta o es
-inválido, usa el año del proveedor y después su fecha de estreno.
+Usa exclusivamente el estreno de la caché TMDB confirmada y vigente de Canadá;
+si falta o es inválido, corresponde a «Sin año conocido».
 No consulta servicios externos ni cambia las fechas originales almacenadas.
 
 Las nuevas consultas de detalles TMDB incluyen palabras clave en la misma
@@ -175,7 +191,7 @@ En las tarjetas y fichas de películas, **Ya la vi** guarda la marca y cambia a
 permite mostrar todo, solo películas no vistas o solo vistas, junto con los demás
 filtros. Por defecto se selecciona **Películas que no he visto**; puedes elegir
 **Todo** para incluir también las vistas. Está disponible también en películas infantiles y de otros alfabetos,
-pero no en series ni canales.
+pero no en series.
 
 Las marcas se guardan en la tabla `watched_movies` de SQLite, por identificador
 de película del proveedor, separadas de los datos originales y de TMDB.
@@ -193,13 +209,8 @@ confirmadas, así que para revisar candidatos selecciona todas las plataformas
 y desmarca los logos. Las películas bloqueadas siguen ocultas. Los totales de
 cobertura corresponden al catálogo completo, no a la selección filtrada.
 
-**Actualizar plataformas de Canadá** obtiene únicamente los directorios TMDB
-de plataformas de películas y series para CA; no consulta títulos ni descarga
-logos nuevos. Se reutiliza la biblioteca local de iconos y, si falta alguno,
-se muestra el nombre. Antes de esa primera actualización se muestran las
-plataformas ya conocidas por las fichas, servicios guardados y filtros activos.
-
-**Consultar pendientes con TMDB** actualiza esos directorios y procesa entre
+**Consultar pendientes con TMDB** es el único botón de inicio: primero actualiza
+los directorios de plataformas de películas y series para Canadá y después procesa entre
 1 y 500 títulos pendientes del catálogo actual (50 por defecto), sin limitarse
 a los filtros o la página visibles. Los títulos se consultan secuencialmente,
 con una pausa de 250 ms entre títulos; cada título puede requerir varias
@@ -330,12 +341,19 @@ python app.py --db ./datos/catalog.db stats
 
 | Acción | Tabla SQLite |
 | --- | --- |
-| `get_live_categories` | `live_categories` |
 | `get_vod_categories` | `vod_categories` |
 | `get_series_categories` | `series_categories` |
-| `get_live_streams` | `live_streams` |
 | `get_vod_streams` | `movies` |
 | `get_series` | `series` |
+
+JaimeTV solo explora películas y series: no descarga TV en vivo ni ofrece
+navegación, fichas, búsqueda o estadísticas de canales. Si la base existente
+contiene `live_categories` o `live_streams`, la próxima sincronización correcta
+elimina esas tablas y sus exclusiones antiguas, en la misma transacción.
+Abrir la aplicación no las elimina. En sincronizaciones posteriores,
+`DROP TABLE IF EXISTS` comprueba su ausencia sin recorrer registros ni volver
+a descargar canales. SQLite reutiliza el espacio liberado; no se ejecuta
+`VACUUM` automáticamente. Películas, series y caché TMDB se conservan.
 
 Cada registro conserva **todos** los campos de la API en `raw_json`.
 Las categorías normalizan ID, nombre y padre. Los contenidos normalizan ID,
@@ -380,6 +398,13 @@ no están fijados a los números de un proveedor. Se recuerdan en
 posterior falta la definición de la categoría bloqueada.
 
 La tabla independiente `tmdb_metadata` no se borra ni modifica durante `sync`.
+Esto también se aplica al botón «Sincronizar catálogo»: conserva las coincidencias,
+candidatos, consultas sin coincidencia, fechas y disponibilidad TMDB, además de
+plataformas, vistas y bloqueadas. Los cambios de nota, categoría o portada del
+proveedor no invalidan TMDB. Si cambia la identidad del título (nombre, título,
+año o fecha de estreno del proveedor), su consulta anterior se conserva, pero
+deja de usarse para evitar asociar información a una obra distinta y vuelve
+a aparecer como pendiente.
 Los enriquecimientos siguen disponibles al reabrir las fichas. Si cambia el
 título o año que identifica una obra, TMDB requiere una nueva asociación para
 evitar mostrar metadatos de otra película; el resultado anterior no se destruye.
@@ -427,6 +452,8 @@ En tablets y móviles (menos de 1200 px), los filtros se pliegan inicialmente:
 toca «Filtros» para abrirlos o cerrarlos. En tablets de 600–899 px se muestran
 cuatro tarjetas por fila; de 900–1199 px, cinco. En escritorio se conserva
 el panel lateral de filtros abierto.
+En tablet, el encabezado mantiene los controles de tema y pantalla completa
+en una sola fila; los enlaces se deslizan horizontalmente si no caben.
 En móviles de menos de 600 px se muestran dos tarjetas por fila, navegación
 horizontal deslizable y paginación reducida a anterior, página actual y siguiente,
 con controles táctiles de al menos 44 px.
@@ -445,24 +472,30 @@ registrada muestran «Sin registro de actualización». Un intento fallido no
 reemplaza la última comprobación correcta de la aplicación.
 El resumen «Cobertura TMDB» solo aparece en Administración; los listados
 conservan el filtro por estado TMDB, pero no muestran los contadores de cobertura.
+La cobertura muestra simultáneamente películas y series en filas separadas,
+con total, consultados, asociados, por elegir, sin coincidencia y pendientes.
+El número «Por elegir» enlaza al listado de candidatos de ese catálogo,
+incluyendo títulos vistos e infantiles, sin filtros de plataformas.
 
 - La sección Resumen se ha eliminado. La ruta antigua `/dashboard` redirige a
   `/movies` para conservar marcadores anteriores. Los totales siguen disponibles
   desde el comando `stats`.
-- `/movies`, `/series`, `/channels`: búsqueda por nombre, filtro de categoría
-  (incluyendo «Sin categoría») y orden A–Z/Z–A. La única vista es Tarjetas, con 50 por
-  página, con portadas, título, año, categoría, valoración y enlace al tráiler.
+- `/movies`, `/series`: búsqueda por nombre, géneros TMDB y orden A–Z/Z–A.
+  La única vista es Tarjetas, con 50 por página, portadas, título, año,
+  géneros y valoración.
   La paginación se aplica en SQLite, después de filtrar y ordenar todo el catálogo.
   Cambiar filtros u orden vuelve a la primera página.
+  «Ordenar por» combina criterio y dirección en un único selector (por ejemplo,
+  Nombre A–Z, Año más recientes primero o Valoración mayor a menor).
   Los enlaces antiguos con `view=table` se muestran en tarjetas y la antigua
   cookie de vista se elimina automáticamente.
   Los filtros se apilan en un panel lateral izquierdo en escritorio y encima
   de los resultados en móvil.
-  Categorías y géneros se eligen con etiquetas de selección múltiple:
-  cualquiera de las etiquetas del mismo grupo (O), combinando ambos grupos
+  Los géneros se eligen con etiquetas de selección múltiple:
+  cualquiera de las etiquetas del mismo grupo (O), combinando los grupos
   y los demás filtros (Y). Sin selección no se restringe ese grupo.
-  Los géneros proceden del catálogo original, separados por comas, sin
-  distinguir mayúsculas; no requieren consultas a TMDB. La selección se
+  Los géneros de películas y series proceden de la caché TMDB confirmada y
+  vigente, sin distinguir mayúsculas; filtrar no requiere consultas externas. La selección se
   conserva al ordenar, paginar y volver de una ficha. En la API se repiten
   los parámetros `category` y `genre` para seleccionar varios valores.
   También funciona en Niños, Otros alfabetos y resultados por persona
@@ -470,11 +503,11 @@ conservan el filtro por estado TMDB, pero no muestran los contadores de cobertur
   Las fichas conservan los filtros y página de origen para volver con «Atrás».
   Las portadas se cargan directamente sin Referer y con carga diferida;
   si no hay imagen o falla, se muestra un aviso.
-- «Niños» tiene listados propios en `/kids/movies`, `/kids/series` y
-  `/kids/channels`, con los mismos filtros, portadas y enlaces de tráiler.
-  Se selecciona por categoría principal o secundaria del proveedor:
-  canales `INFANTIL`; películas `INFANTIL`, `ANIMACION`, `CAST. ANIMACION`
-  y `ANIME`; series `S INFANTIL`, `S. Animacion` y `S ANIME`.
+- «Niños» tiene listados propios en `/kids/movies` y `/kids/series`,
+  con los mismos filtros y portadas.
+  La selección infantil utiliza:
+  películas y series con géneros TMDB Familia o Animación
+  (también Family o Animation).
   Se incluyen todos los alfabetos. Se han quitado los textos explicativos sobre
   categorías y alfabetos de la interfaz, manteniendo los estados, errores y
   atribuciones de los servicios.
@@ -484,18 +517,16 @@ conservan el filtro por estado TMDB, pero no muestran los contadores de cobertur
   y se desmarcan para evitar selecciones ocultas con cero resultados.
   Al activarlo vuelven a estar disponibles; la sección Niños no cambia.
   La preferencia se recuerda en una cookie local durante un año y se comparte
-  entre Películas, Series y Canales. No se borran registros ni se requiere
+  entre Películas y Series. No se borran registros ni se requiere
   sincronizar. Estadísticas, exportaciones, CLI y resultados por persona
   siguen incluyendo todo el catálogo. `children=only|all|exclude` permite
   aplicar el filtro también en la API.
-- Haz clic en el nombre de cualquier canal, película o serie para abrir su ficha:
-  muestra solo la tabla de campos con valor, sin bloque JSON, omitiendo `null`, texto vacío o solo
-  espacios y listas u objetos vacíos. Conserva `0` y `false`. Los campos de imagen
-  (`stream_icon`, `cover`, `backdrop_path`) no se muestran como texto; las imágenes siguen cargándose. La ficha sustituye `category_id` y
-  `category_ids` por `category_name` y `category_names`, usando las categorías
-  locales del tipo de contenido. Se omite `stream_type` en películas y series
-  por ser redundante. La tabla también oculta `num`, `stream_id`, `series_id`, `container_extension` y `added` (Fecha de incorporación). Los IDs sin correspondencia se indican como
-  «Categoría desconocida (ID …)». El JSON original en SQLite no se modifica.
+- Películas y series usan géneros TMDB, reparto, dirección, año y valoración
+  de coincidencias confirmadas y vigentes. Los géneros disponibles también
+  se obtienen de esa caché. Los parámetros antiguos `category` en películas y
+  series se ignoran. Las tarjetas muestran el año y los géneros TMDB.
+- Haz clic en el nombre de cualquier película o serie para abrir su ficha.
+  Ambas muestran solo TMDB. El JSON original en SQLite no se modifica.
   El título se sitúa sobre la tabla de detalles, con «Atrás» a la derecha
   en la misma línea. La ficha muestra lateralmente la portada de `stream_icon` (o `cover` en series),
   encima de los detalles en móvil. Las series también muestran las imágenes de
@@ -556,7 +587,7 @@ conservan el filtro por estado TMDB, pero no muestran los contadores de cobertur
   Las traducciones quedan pendientes; no se envía información a servicios externos.
   Ambas secciones mantienen todos sus filtros y orden en tarjetas.
   La API admite `foreign=0` (predeterminado, escritura latina) o `foreign=1`
-  (otros alfabetos) en películas/series. Los canales no cambian. Las estadísticas, la
+  (otros alfabetos) en películas/series. Las estadísticas, la
   búsqueda CLI, las exportaciones y los resultados por persona incluyen ambos catálogos.
 - Búsqueda instantánea con debounce de 250 ms y cancelación de peticiones antiguas.
 - Selector de modo claro/oscuro con icono de sol/luna, etiqueta accesible y tooltip
@@ -569,7 +600,7 @@ conservan el filtro por estado TMDB, pero no muestran los contadores de cobertur
   de filtros para ordenar todo el resultado sin perder filtros. Año y valoración
   se ordenan numéricamente y los valores ausentes quedan al final en ambos sentidos.
 - Los formularios, ordenamiento y paginación funcionan también sin JavaScript.
-- `/api/catalog/movies`, `/api/catalog/series`, `/api/catalog/channels`: JSON
+- `/api/catalog/movies`, `/api/catalog/series`: JSON
   filtrable con `q`, `actor`, `director`, `category`, `sort_by` (`name`, `category_name`, `year`, `rating`),
   `sort` (`asc`/`desc`), `children`, `foreign` y `view` (`table`/`cards`).
   Por compatibilidad con clientes programáticos, la API conserva su respuesta

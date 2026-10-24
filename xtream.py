@@ -13,10 +13,8 @@ class CatalogError(Exception):
 
 
 ACTIONS = {
-    "live_categories": "get_live_categories",
     "vod_categories": "get_vod_categories",
     "series_categories": "get_series_categories",
-    "live_streams": "get_live_streams",
     "movies": "get_vod_streams",
     "series": "get_series",
 }

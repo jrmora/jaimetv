@@ -3,6 +3,14 @@
 {% block page_heading %}{{ title }}{% endblock %}
 {% block main_class %}catalog-page{% endblock %}
 {% block content %}
+<div class="catalog-search mx-auto mb-3">
+  <label for="q" class="visually-hidden">Buscar títulos, actores o directores</label>
+  <div class="input-group input-group-lg">
+    <input id="q" name="q" form="filters" type="search" class="form-control" maxlength="200" value="{{ filters.q }}" placeholder="Busca un título, actor o director…" autocomplete="off" aria-describedby="search-help">
+    <button class="btn btn-primary" type="submit" form="filters">Buscar</button>
+  </div>
+  <p id="search-help" class="small text-muted mt-2 mb-0">Títulos y personas de TMDB. Se aplican los filtros seleccionados.</p>
+</div>
 {% if kids %}
 <div class="d-flex gap-3 mb-3">
   {% for tab_kind, label in labels.items() %}
@@ -18,7 +26,7 @@
 {% endif %}
 <div class="catalog-layout mt-4">
 <details id="catalog-filters" class="catalog-sidebar border rounded bg-body-tertiary p-3" aria-label="Filtros del catálogo" open>
-<summary class="h5 mb-0">Filtros <span class="filter-toggle-hint small fw-normal">· Mostrar / ocultar</span></summary>
+<summary class="h5 mb-0">Filtros</summary>
 <div class="mt-3">
 <form id="filters" method="get" class="d-flex flex-column gap-3" data-endpoint="{{ url_for('catalog_api', kind=kind) }}">
   <input type="hidden" name="foreign" value="{{ filters.foreign }}">
@@ -49,9 +57,16 @@
   {% endif %}
   <div>
     <label for="sort-by" class="form-label">Ordenar por</label>
-    <select id="sort-by" name="sort_by" class="form-select">
-      {% for column, label in [('name', 'Nombre'), ('category_name', 'Categoría'), ('year', 'Año'), ('rating', 'Valoración')] %}
-      <option value="{{ column }}" {% if filters.sort_by == column %}selected{% endif %}>{{ label }}</option>
+    <select id="sort-by" name="ordering" class="form-select">
+      {% for column, label, ascending, descending in [
+        ('name', 'Nombre', 'A–Z', 'Z–A'),
+        ('category_name', 'Género TMDB', 'A–Z', 'Z–A'),
+        ('year', 'Año', 'Más antiguas primero', 'Más recientes primero'),
+        ('rating', 'Valoración', 'Menor a mayor', 'Mayor a menor')
+      ] %}
+      {% for direction, description in [('asc', ascending), ('desc', descending)] %}
+      <option value="{{ column }}:{{ direction }}" {% if filters.sort_by == column and filters.sort == direction %}selected{% endif %}>{{ label }} · {{ description }}</option>
+      {% endfor %}
       {% endfor %}
     </select>
   </div>
@@ -68,28 +83,19 @@
   {% endif %}
   {% if kind in ['movies', 'series'] %}
   {% include "provider_filter.html" %}
-  {% endif %}
   <div>
-    <label for="q" class="form-label">Buscar por nombre</label>
-    <input id="q" name="q" type="search" class="form-control" maxlength="200" value="{{ filters.q }}" placeholder="Escribe para buscar…" autocomplete="off">
-  </div>
-  <fieldset class="filter-chips">
-    <legend class="fs-6">Categorías</legend>
-    <p class="small text-muted mb-2">Sin selección: todas. Puedes marcar varias.</p>
-    <div class="d-flex flex-wrap gap-2">
-      <input class="btn-check" type="checkbox" id="category-none" name="category" value="__uncategorized__" {% if '__uncategorized__' in selected_categories %}checked{% endif %}>
-      <label class="btn btn-outline-secondary rounded-pill" for="category-none">Sin categoría</label>
-      {% for item in categories %}
-      {% set child_category = item.category_id in children_category_ids %}
-      <input class="btn-check" type="checkbox" id="category-{{ loop.index }}" name="category" value="{{ item.category_id }}" {% if item.category_id in selected_categories %}checked{% endif %}{% if child_category %} data-children-category{% endif %}{% if child_category and filters.children == 'exclude' %} disabled{% endif %}>
-      <label class="btn btn-outline-secondary rounded-pill" for="category-{{ loop.index }}" {% if child_category and filters.children == 'exclude' %}hidden{% endif %}>{{ item.category_name }}</label>
+    <label for="tmdb-status" class="form-label small">Estado TMDB</label>
+    <select id="tmdb-status" name="tmdb_status" class="form-select form-select-sm">
+      {% for value, label in [('all', 'Todos'), ('candidates', 'Por elegir'), ('matched', 'Asociados'), ('missing', 'Sin coincidencia'), ('pending', 'Pendientes')] %}
+      <option value="{{ value }}" {% if filters.get('tmdb_status', 'all') == value %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
-    </div>
-  </fieldset>
+    </select>
+  </div>
+  {% endif %}
   {% if genres %}
   <fieldset class="filter-chips">
     <legend class="fs-6">Géneros</legend>
-    <p class="small text-muted mb-2">Géneros del proveedor. Sin selección: todos.</p>
+    <p class="small text-muted mb-2">Géneros de TMDB. Sin selección: todos.</p>
     <div class="d-flex flex-wrap gap-2">
       {% for genre in genres %}
       <input class="btn-check" type="checkbox" id="genre-{{ loop.index }}" name="genre" value="{{ genre }}" {% if genre in filters.genre %}checked{% endif %}>
@@ -97,23 +103,6 @@
       {% endfor %}
     </div>
   </fieldset>
-  {% endif %}
-  <div>
-    <label for="sort" class="form-label">Orden</label>
-    <select id="sort" name="sort" class="form-select">
-      <option value="asc" {% if filters.sort == 'asc' %}selected{% endif %}>Ascendente</option>
-      <option value="desc" {% if filters.sort == 'desc' %}selected{% endif %}>Descendente</option>
-    </select>
-  </div>
-  {% if kind in ['movies', 'series'] %}
-  <div>
-    <label for="actor" class="form-label">Actor / actriz</label>
-    <input id="actor" name="actor" type="search" class="form-control" maxlength="200" value="{{ filters.actor }}" placeholder="Parte del nombre, por ejemplo: Willis" autocomplete="off">
-  </div>
-  <div>
-    <label for="director" class="form-label">Director / directora</label>
-    <input id="director" name="director" type="search" class="form-control" maxlength="200" value="{{ filters.director }}" placeholder="Parte del nombre, por ejemplo: Gilliam" autocomplete="off">
-  </div>
   {% endif %}
   <div class="d-flex flex-wrap gap-2">
     <button class="btn btn-primary" type="submit">Buscar</button>

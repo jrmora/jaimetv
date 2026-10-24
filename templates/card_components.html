@@ -13,7 +13,7 @@
     </a>
     <div class="p-3">
       <h2 class="h6 mb-2"><a class="text-body text-decoration-none" href="{{ url_for('detail', kind=kind, id=item.id, **filters) }}">{{ item.name }}</a></h2>
-      <p class="small text-muted mb-1">{{ item.year or '—' }} · {{ item.category_name }}</p>
+      <p class="small text-muted mb-1">{{ item.year or '—' }} · {{ item.genre or 'Sin géneros TMDB' }}</p>
       <div class="d-flex align-items-center justify-content-between">
         <span class="small">TMDB: {{ item.rating|string + '/10' if item.rating is not none else '—' }}</span>
       </div>

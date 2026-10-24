@@ -1,10 +1,12 @@
 import tempfile
+import copy
 import threading
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
 from app import create_app
+from catalog import CatalogStore, fingerprint
 from test_app import snapshot
 from xtream import CatalogError
 
@@ -109,6 +111,54 @@ class WebSyncTests(unittest.TestCase):
         self.assertEqual(response.json["status"], "failed")
         self.assertNotIn(b"private-provider-password", response.data)
         self.provider.close.assert_called_once()
+
+    def test_sync_button_preserves_all_tmdb_results_and_platforms_across_restart(self):
+        store = self.app.config["CATALOG_STORE"]
+        data = snapshot()
+        store.replace(data)
+        for kind, record_id, status in (
+            ("movies", "10", "matched"), ("movies", "11", "candidates"),
+            ("movies", "12", "missing"), ("series", "20", "matched"),
+        ):
+            raw = store.detail(kind, record_id)["data"]
+            store.save_tmdb(kind, record_id, "CA", fingerprint(raw), {
+                "status": status, "id": 63, "checked_at": "2026-10-23T12:00:00+00:00",
+                "genres": ["Drama"], "providers": {"flatrate": ["Netflix"]},
+                "cast": [{"name": "An Actor"}], "directors": ["A Director"],
+                "candidates": [{"id": 64, "title": "Alternative"}],
+            })
+        store.save_provider_directory({"movies": ["Netflix"], "series": ["Crave"]})
+        store.set_movie_watched("10", True)
+        store.set_movie_banned("11", True)
+        tables = ("tmdb_metadata", "tmdb_provider_directory", "maintenance_updates",
+                  "watched_movies", "banned_movies")
+
+        def saved_rows(database):
+            with database.connect() as db:
+                return {table: [tuple(row) for row in db.execute(f"SELECT * FROM {table} ORDER BY 1, 2")]
+                        for table in tables}
+
+        before = saved_rows(store)
+        changed = copy.deepcopy(data)
+        changed["movies"][0].update(rating="9", category_id="2", stream_icon="https://example.invalid/new.jpg")
+        changed["movies"].append({"stream_id": 100, "name": "New movie"})
+        changed["series"][0]["last_modified"] = "1234567890"
+        self.provider.download.return_value = changed
+        self.assertEqual(self.start().status_code, 202)
+        self.join_threads()
+        self.assertEqual(self.client.get("/api/sync").json["status"], "completed")
+        reopened = CatalogStore(store.path)
+        self.assertEqual(saved_rows(reopened), before)
+        self.assertEqual(reopened.tmdb_coverage("movies")["checked"], 3)
+        self.assertEqual(reopened.tmdb_coverage("series")["checked"], 1)
+        self.assertEqual(reopened.tmdb_pending("movies", 500), ["13", "100"])
+
+        changed["movies"][0]["name"] = "A genuinely different movie"
+        self.provider.download.return_value = changed
+        self.assertEqual(self.start().status_code, 202)
+        self.join_threads()
+        self.assertEqual(saved_rows(reopened), before)
+        self.assertIn("10", reopened.tmdb_pending("movies", 500))
 
 
 if __name__ == "__main__":

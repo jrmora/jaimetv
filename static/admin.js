@@ -6,7 +6,6 @@
   const status = panel.querySelector("#tmdb-batch-status");
   const form = panel.querySelector("#tmdb-batch-controls");
   const start = panel.querySelector("#tmdb-batch-start");
-  const directory = panel.querySelector("#tmdb-directory");
   const cancel = panel.querySelector("#tmdb-batch-cancel");
   const kind = panel.querySelector("#tmdb-kind");
   const limit = panel.querySelector("#tmdb-batch-limit");
@@ -33,7 +32,7 @@
     try {
       const state = await request();
       const running = state.status === "running";
-      for (const control of [start, directory, kind, limit]) control.disabled = running;
+      for (const control of [start, kind, limit]) control.disabled = running;
       cancel.hidden = !running;
       status.setAttribute("aria-busy", String(running));
       if (state.status === "idle") return;
@@ -57,15 +56,15 @@
     }
   }
 
-  async function begin(action) {
-    if (action === "start" && !form.reportValidity()) return;
+  async function begin() {
+    if (!form.reportValidity()) return;
     clearTimeout(timer);
-    start.disabled = directory.disabled = true;
+    start.disabled = true;
     try {
-      await request({ action, kind: kind.value, limit: action === "directory" ? "50" : limit.value });
+      await request({ action: "start", kind: kind.value, limit: limit.value });
     } catch (error) {
       message(`No se pudo iniciar el proceso. ${error.message}`, true);
-      start.disabled = directory.disabled = false;
+      start.disabled = false;
       return;
     }
     check();
@@ -73,9 +72,8 @@
 
   form.addEventListener("submit", event => {
     event.preventDefault();
-    begin("start");
+    begin();
   });
-  directory.addEventListener("click", () => begin("directory"));
   cancel.addEventListener("click", async () => {
     cancel.disabled = true;
     try {

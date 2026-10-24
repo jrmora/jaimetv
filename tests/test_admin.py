@@ -1,10 +1,14 @@
 import tempfile
 import unittest
+import re
+from html import unescape
+from urllib.parse import parse_qs, urlsplit
 from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app
-from catalog import CatalogStore
+from catalog import CatalogStore, fingerprint
+from test_app import snapshot
 from updater import write_state
 
 
@@ -19,11 +23,12 @@ class AdministrationTests(unittest.TestCase):
         for kind in ("movies", "series"):
             response = self.client.get(f"/admin?kind={kind}")
             self.assertEqual(response.status_code, 200)
-            for control in ("catalog-sync", "tmdb-directory", "tmdb-batch-start",
+            for control in ("catalog-sync", "tmdb-batch-start",
                             "tmdb-batch-cancel", "tmdb-kind", "tmdb-batch-limit"):
                 self.assertIn(f'id="{control}"'.encode(), response.data)
             self.assertIn(b"admin.js", response.data)
-        for path in ("/movies", "/series", "/channels", "/kids/movies"):
+            self.assertNotIn(b'id="tmdb-directory"', response.data)
+        for path in ("/movies", "/series", "/kids/movies"):
             response = self.client.get(path)
             self.assertIn(b'href="/admin"', response.data)
             for control in ("catalog-sync", "tmdb-directory", "tmdb-batch-start"):
@@ -34,7 +39,8 @@ class AdministrationTests(unittest.TestCase):
         for kind in ("movies", "series"):
             page = self.client.get(f"/admin?kind={kind}").get_data(as_text=True)
             self.assertIn("Cobertura TMDB", page)
-            self.assertIn("títulos consultados en este catálogo (todos los filtros)", page)
+            self.assertIn('data-coverage-kind="movies"', page)
+            self.assertIn('data-coverage-kind="series"', page)
         for path in ("/movies", "/series", "/kids/movies", "/kids/series", "/movies?foreign=1", "/series?foreign=1"):
             with patch.object(self.app.config["CATALOG_STORE"], "tmdb_coverage") as coverage:
                 page = self.client.get(path).get_data(as_text=True)
@@ -82,6 +88,23 @@ class AdministrationTests(unittest.TestCase):
         page = self.client.get("/admin").get_data(as_text=True)
         self.assertEqual(page.count("Sin registro de actualizaci"), 4)
 
+    def test_coverage_separates_movies_and_series_regardless_of_selected_tab(self):
+        store = self.app.config["CATALOG_STORE"]
+        store.replace(snapshot())
+        for kind in ("movies", "series"):
+            page = self.client.get(f"/admin?kind={kind}").get_data(as_text=True)
+            page = re.sub(r'<a [^>]*>(\d+)</a>', r'\1', page)
+            self.assertIn(
+                '<tr data-coverage-kind="movies"><th scope="row">Películas</th>'
+                '<td>4</td><td>0</td><td>0</td><td>0</td><td>0</td><td>4</td>',
+                page,
+            )
+            self.assertIn(
+                '<tr data-coverage-kind="series"><th scope="row">Series</th>'
+                '<td>1</td><td>0</td><td>0</td><td>0</td><td>0</td><td>1</td>',
+                page,
+            )
+
     def test_application_keeps_last_success_after_failed_attempt(self):
         state = Path(self.temp.name) / "state"
         with patch.dict("os.environ", {"IPTV_UPDATE_STATE": str(state)}):
@@ -93,3 +116,22 @@ class AdministrationTests(unittest.TestCase):
         write_state(state, status="failed")
         page = app.test_client().get("/admin").get_data(as_text=True)
         self.assertIn('datetime="2026-10-23T12:00:00+00:00"', page)
+
+    def test_candidate_counts_link_to_unrestricted_candidate_listing(self):
+        store = self.app.config["CATALOG_STORE"]
+        store.replace(snapshot())
+        for kind, record_id in (("movies", "10"), ("series", "20")):
+            raw = store.detail(kind, record_id)["data"]
+            store.save_tmdb(kind, record_id, "CA", fingerprint(raw), {"status": "candidates"})
+        store.set_movie_watched("10", True)
+        page = self.client.get("/admin").get_data(as_text=True)
+        for kind in ("movies", "series"):
+            row = re.search(rf'<tr data-coverage-kind="{kind}">(.*?)</tr>', page).group(1)
+            link = unescape(re.search(r'<a href="([^"]+)"', row).group(1))
+            params = parse_qs(urlsplit(link).query)
+            self.assertEqual(params["tmdb_status"], ["candidates"])
+            self.assertEqual(params["children"], ["all"])
+            self.assertEqual(params["watched"], ["all"])
+            response = self.client.get(link)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn(b"Batman", response.data)

@@ -16,7 +16,6 @@ from platforms import platform_name
 
 
 KINDS = {
-    "channels": ("live_streams", "live_categories", "stream_id"),
     "movies": ("movies", "vod_categories", "stream_id"),
     "series": ("series", "series_categories", "series_id"),
 }
@@ -26,7 +25,7 @@ SORT_COLUMNS = {
     "year": "CAST(NULLIF(s.year, '') AS INTEGER)",
     "rating": "s.rating",
 }
-CATEGORY_TABLES = ("live_categories", "vod_categories", "series_categories")
+CATEGORY_TABLES = ("vod_categories", "series_categories")
 
 
 def excluded_category(name):
@@ -42,7 +41,6 @@ def category_memberships(row):
 
 
 CHILDREN_CATEGORIES = {
-    "channels": {"INFANTIL"},
     "movies": {"INFANTIL", "ANIMACION", "CAST. ANIMACION", "ANIME"},
     "series": {"S INFANTIL", "S. Animacion", "S ANIME"},
 }
@@ -103,13 +101,12 @@ def people_names(value):
 
 
 def effective_people(raw, payload):
-    source = json.loads(raw)
     tmdb = json.loads(payload) if payload else {}
     cast = [person["name"] for person in tmdb.get("cast", []) if person.get("name", "").strip()]
     directors = people_names(tmdb.get("directors", []))
     return json.dumps({
-        "cast": cast or people_names(source.get("cast")),
-        "director": directors or people_names(source.get("director")),
+        "cast": cast,
+        "director": directors,
         "creators": people_names(tmdb.get("creators", [])),
     }, ensure_ascii=False)
 
@@ -381,8 +378,8 @@ class CatalogStore:
         return self._write_snapshot(snapshot)
 
     def _write_snapshot(self, snapshot, incremental=False):
-        if set(snapshot) != set(ACTIONS):
-            raise CatalogError("La descarga no contiene las seis colecciones requeridas.")
+        if not set(ACTIONS).issubset(snapshot) or set(snapshot) - set(ACTIONS) - {"live_categories", "live_streams"}:
+            raise CatalogError("La descarga no contiene las cuatro colecciones de películas y series requeridas.")
         # Una única transacción conserva el catálogo anterior si falla cualquier colección.
         duplicates = {}
         report = {table: dict(new=0, updated=0, unchanged=0, excluded=0, removed_excluded=0) for table in ACTIONS}
@@ -487,6 +484,10 @@ class CatalogStore:
                 "INSERT OR REPLACE INTO sync_metadata VALUES (1, ?)",
                 (datetime.now(timezone.utc).isoformat(timespec="seconds"),),
             )
+            if incremental:
+                db.execute("DROP TABLE IF EXISTS live_streams")
+                db.execute("DROP TABLE IF EXISTS live_categories")
+                db.execute("DELETE FROM sync_excluded_categories WHERE category_table='live_categories'")
         if incremental:
             self.sync_report = report
         return duplicates
@@ -510,9 +511,15 @@ class CatalogStore:
             )]
 
     def genres(self, kind):
-        table, _, _ = KINDS[kind]
+        table, _, key = KINDS[kind]
         with self.connect() as db:
-            rows = db.execute(f"SELECT DISTINCT genre FROM {table} WHERE genre IS NOT NULL").fetchall()
+            rows = db.execute(f"""
+                SELECT DISTINCT genre.value FROM {table} s
+                JOIN tmdb_metadata m ON m.kind=? AND m.record_id=s.{key}
+                    AND m.country='CA' AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
+                JOIN json_each(m.payload, '$.genres') genre
+                WHERE json_extract(m.payload, '$.status')='matched'
+            """, (kind,)).fetchall()
         names = {}
         for row in rows:
             for name in people_names(row[0]):
@@ -535,7 +542,7 @@ class CatalogStore:
             raise ValueError("Filtro de películas vistas inválido.")
         if banned not in {"hide", "only"} or (kind != "movies" and banned != "hide"):
             raise ValueError("Filtro de películas bloqueadas inválido.")
-        if tmdb_status not in TMDB_STATUSES or (kind == "channels" and tmdb_status != "all"):
+        if tmdb_status not in TMDB_STATUSES:
             raise ValueError("Estado TMDB inválido.")
         eras = era if isinstance(era, list) else ([era] if era else [])
         if any(value not in MOVIE_ERAS for value in eras) or (eras and kind != "movies"):
@@ -547,16 +554,18 @@ class CatalogStore:
             AND json_extract(score.payload, '$.votes') > 0
             THEN json_extract(score.payload, '$.rating') END"""
         order = tmdb_rating if sort_by == "rating" else SORT_COLUMNS[sort_by]
+        year = "RELEASE_YEAR(json_extract(score.payload, '$.release_date'))"
+        genre_expression = "(SELECT group_concat(value, ', ') FROM json_each(score.payload, '$.genres'))"
+        if sort_by == "year":
+            order = year
+        if sort_by == "category_name":
+            order = f"CASEFOLD({genre_expression})"
         secondary_order = (
-            f", ({SORT_COLUMNS['year']}) IS NULL, {SORT_COLUMNS['year']} DESC"
+            f", ({year}) IS NULL, {year} DESC"
             if sort_by == "rating" else ""
         )
         conditions, params = [], []
         if eras:
-            year = """COALESCE(
-                RELEASE_YEAR(json_extract(score.payload, '$.release_date')),
-                RELEASE_YEAR(s.year), RELEASE_YEAR(s.release_date)
-            )"""
             era_conditions = {
                 "recent": f"{year} >= 2015",
                 "modern": f"{year} BETWEEN 2000 AND 2014",
@@ -584,15 +593,25 @@ class CatalogStore:
         if watched != "all":
             conditions.append(watched_expression if watched == "seen" else f"NOT {watched_expression}")
         people_metadata = "s.raw_json"
-        if (actor or director or person) and kind in {"movies", "series"}:
+        if q or actor or director or person:
             people_metadata = f"""PEOPLE_METADATA(s.raw_json, (
                 SELECT m.payload FROM tmdb_metadata m
                 WHERE m.kind='{kind}' AND m.record_id=s.{key} AND m.country='CA'
                     AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
                     AND json_extract(m.payload, '$.status')='matched'
             ))"""
+        if q:
+            escaped = q.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            expressions = (
+                "s.name", "json_extract(score.payload, '$.title')",
+                "json_extract(score.payload, '$.original_title')",
+                f"json_extract({people_metadata}, '$.cast')",
+                f"json_extract({people_metadata}, '$.director')",
+                f"json_extract({people_metadata}, '$.creators')",
+            )
+            conditions.append("(" + " OR ".join(f"CASEFOLD({expression}) LIKE ? ESCAPE '\\'" for expression in expressions) + ")")
+            params.extend([f"%{escaped}%"] * len(expressions))
         for value, expression in (
-            (q, "s.name"),
             (actor, f"json_extract({people_metadata}, '$.cast')"),
             (director, f"json_extract({people_metadata}, '$.director')"),
         ):
@@ -601,39 +620,20 @@ class CatalogStore:
                 conditions.append(f"CASEFOLD({expression}) LIKE ? ESCAPE '\\'")
                 params.append(f"%{escaped}%")
         if children != "all":
-            names = sorted(name.casefold() for name in CHILDREN_CATEGORIES[kind])
             membership = f"""EXISTS (
-                SELECT 1 FROM {categories} child_category
-                WHERE CASEFOLD(child_category.category_name) IN ({','.join('?' for _ in names)})
-                AND (child_category.category_id = s.category_id OR EXISTS (
-                    SELECT 1 FROM json_each(s.raw_json, '$.category_ids') child_membership
-                    WHERE CAST(child_membership.value AS TEXT) = child_category.category_id
-                ))
+                SELECT 1 FROM json_each(score.payload, '$.genres')
+                WHERE CASEFOLD(value) IN ('familia', 'animación', 'family', 'animation')
             )"""
             conditions.append(membership if children == "only" else f"NOT {membership}")
-            params.extend(names)
         if foreign is not None and children != "only" and kind in {"movies", "series"}:
             conditions.append("NON_LATIN_TITLE(s.name) = ?")
             params.append(int(bool(foreign)))
         if person:
             conditions.append(f"HAS_PERSON({people_metadata}, ?) = 1")
             params.append(person)
-        selected_categories = category if isinstance(category, list) else ([category] if category else [])
-        category_conditions = []
-        for category_id in dict.fromkeys(selected_categories):
-            if category_id == "__uncategorized__":
-                category_conditions.append("c.category_id IS NULL")
-            else:
-                category_conditions.append("""(s.category_id = ? OR EXISTS (
-                    SELECT 1 FROM json_each(s.raw_json, '$.category_ids') membership
-                    WHERE CAST(membership.value AS TEXT) = ?
-                ))""")
-                params.extend((str(category_id), str(category_id)))
-        if category_conditions:
-            conditions.append("(" + " OR ".join(category_conditions) + ")")
         selected_genres = genre if isinstance(genre, list) else ([genre] if genre else [])
         if selected_genres:
-            conditions.append("(" + " OR ".join("HAS_GENRE(s.genre, ?) = 1" for _ in selected_genres) + ")")
+            conditions.append("(" + " OR ".join(f"HAS_GENRE({genre_expression}, ?) = 1" for _ in selected_genres) + ")")
             params.extend(selected_genres)
         selected_providers = provider if isinstance(provider, list) else ([provider] if provider else [])
         selected_providers = sorted({platform_name(name) for name in selected_providers})
@@ -706,8 +706,8 @@ class CatalogStore:
                 limit = "LIMIT ? OFFSET ?"
                 query_params.extend((50, (page - 1) * 50))
             rows = db.execute(
-                f"""SELECT s.{key} AS id, s.name, s.category_id, {tmdb_rating} AS rating, s.year,
-                           s.genre, COALESCE(c.category_name, 'Sin categoría') AS category_name,
+                f"""SELECT s.{key} AS id, s.name, s.category_id, {tmdb_rating} AS rating, {year} AS year,
+                           {genre_expression} AS genre, COALESCE(c.category_name, 'Sin categoría') AS category_name,
                            json_extract(s.raw_json, '$.youtube_trailer') AS youtube_trailer,
                            json_extract(s.raw_json, '$.stream_icon') AS preview_icon,
                            json_extract(s.raw_json, '$.cover') AS preview_cover

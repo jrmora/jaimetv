@@ -13,9 +13,29 @@
 {% endfor %}
 </ul>
 {% else %}
+{% set has_score = tmdb.rating is defined and tmdb.rating is number and tmdb.rating >= 0 and tmdb.rating <= 10 and tmdb.votes is defined and tmdb.votes is number and tmdb.votes > 0 %}
+{% set percent = (tmdb.rating * 10)|round|int if has_score else 0 %}
+<div class="tmdb-score d-flex align-items-center gap-3 mb-3" data-replaces-field="rating">
+  <div class="score-ring {{ 'score-high' if percent >= 70 else 'score-medium' if percent >= 40 else 'score-low' }}{% if not has_score %} score-unrated{% endif %}" aria-hidden="true">
+    <svg viewBox="0 0 100 100" focusable="false">
+      <circle class="score-track" cx="50" cy="50" r="43"/>
+      <circle class="score-progress" cx="50" cy="50" r="43" pathLength="100" stroke-dasharray="{{ percent }} 100"/>
+    </svg>
+    <span class="score-value">{{ percent|string ~ '%' if has_score else '—' }}</span>
+  </div>
+  <div>
+    <p class="fw-bold mb-1">Puntuación de usuarios</p>
+    {% if has_score %}
+    <p class="mb-0"><strong>{{ tmdb.rating|round(1) }}/10</strong> · {{ tmdb.votes }} votos en TMDB</p>
+    <span class="visually-hidden">{{ percent }} por ciento</span>
+    {% else %}
+    <p class="text-muted mb-0">Sin valoración disponible en TMDB</p>
+    {% endif %}
+  </div>
+</div>
 <p><a href="https://www.themoviedb.org/{{ tmdb.media }}/{{ tmdb.id }}" target="_blank" rel="noopener noreferrer">Ver ficha en TMDB</a></p>
 <div class="table-responsive">
-<table class="table"><tbody>
+<table class="table tmdb-details-table"><tbody>
   {% for field, label, value in [
     ('', 'Título en español', tmdb.title), ('alternative_title', 'Título original', tmdb.original_title),
     ('premiere', 'Estreno según TMDB', tmdb.release_date),
@@ -23,10 +43,14 @@
     ('episode_run_time', 'Duración según TMDB (min)', tmdb.runtime),
     ('', 'Idioma original (no indica el audio de tu copia)', tmdb.original_language),
     ('', 'Países de producción', tmdb.countries|join(', ')),
-    ('', 'Productoras', tmdb.companies|join(', ')), ('', 'Temporadas', tmdb.seasons),
+    ('companies', 'Productoras', tmdb.companies|join(', ')), ('', 'Temporadas', tmdb.seasons),
     ('', 'Episodios', tmdb.episodes)
   ] %}
-  {% if value %}<tr{% if field %} data-replaces-field="{{ field }}"{% endif %}><th scope="row">{{ label }}</th><td>{{ value }}</td></tr>{% endif %}
+  {% if value %}<tr{% if field in ['plot', 'companies'] %} class="tmdb-wide-row"{% endif %}{% if field %} data-replaces-field="{{ field }}"{% endif %}><th scope="row">{{ label }}</th><td>
+    {% if field == 'genre' %}
+      {% for genre in tmdb.genres %}<a class="genre-link" href="{{ url_for('listing', kind=request.view_args.kind, genre=genre, children='all', foreign=0, watched='all') }}">{{ genre }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+    {% else %}{{ value }}{% endif %}
+  </td></tr>{% endif %}
   {% endfor %}
   {% for field, label, names in [('director', 'Dirección según TMDB', tmdb.directors), ('creators', 'Creadores', tmdb.creators)] %}
   {% if names %}
@@ -35,33 +59,35 @@
   </td></tr>
   {% endif %}
   {% endfor %}
-  {% if tmdb.votes and tmdb.rating is not none %}<tr data-replaces-field="rating"><th scope="row">Valoración TMDB</th><td>{{ tmdb.rating }}/10 · {{ tmdb.votes }} votos</td></tr>{% endif %}
-  {% if tmdb.cast %}<tr data-replaces-field="cast"><th scope="row">Reparto y personajes</th><td><ul class="mb-0">{% for person in tmdb.cast %}<li><a class="person-link" href="{{ url_for('person_results', name=person.name) }}">{{ person.name }}</a>{% if person.character %} — {{ person.character }}{% endif %}</li>{% endfor %}</ul></td></tr>{% endif %}
+  {% if tmdb.cast %}<tr class="tmdb-wide-row" data-replaces-field="cast"><th scope="row">Reparto y personajes</th><td><ul class="mb-0">{% for person in tmdb.cast %}<li><a class="person-link" href="{{ url_for('person_results', name=person.name) }}">{{ person.name }}</a>{% if person.character %} — {{ person.character }}{% endif %}</li>{% endfor %}</ul></td></tr>{% endif %}
   {% if tmdb.imdb_id and tmdb.imdb_id.startswith('tt') and tmdb.imdb_id[2:].isdigit() %}<tr><th scope="row">IMDb</th><td><a href="https://www.imdb.com/title/{{ tmdb.imdb_id }}/" target="_blank" rel="noopener noreferrer">{{ tmdb.imdb_id }}</a></td></tr>{% endif %}
   {% if tmdb.trailer_url %}<tr data-replaces-field="youtube_trailer"><th scope="row">Tráiler TMDB</th><td>{{ trailer_link({'name': tmdb.title, 'trailer_url': tmdb.trailer_url}) }}{% if not tmdb.trailer_official %}<span class="small text-muted">No marcado como oficial</span>{% endif %}</td></tr>{% endif %}
 </tbody></table>
 </div>
 <h3 class="h5">Dónde verla en Canadá</h3>
-<ul>
+<ul class="watch-availability list-unstyled d-flex flex-wrap gap-3">
+{% set availability = namespace(found=false) %}
 {% for key, label in [('flatrate', 'Suscripción'), ('rent', 'Alquiler'), ('buy', 'Compra'), ('free', 'Gratis'), ('ads', 'Con anuncios')] %}
-<li class="mb-3"><strong>{{ label }}:</strong>
-  <div class="provider-icons d-flex flex-wrap gap-2 mt-2">
+{% if provider_icons[key] %}
+{% set availability.found = true %}
+<li class="d-flex flex-wrap align-items-center gap-2" data-access="{{ key }}"><strong class="small">{{ label }}:</strong>
+  <div class="provider-icons d-flex flex-wrap gap-2">
   {% for provider in provider_icons[key] %}
     {% if provider.filename %}
     <span class="provider-badge" tabindex="0" aria-label="{{ provider.name }}" title="{{ provider.name }}">
-      <img class="provider-logo rounded" src="{{ url_for('static', filename=provider.filename) }}" width="48" height="48" alt="{{ provider.name }}" loading="lazy">
+      <img class="provider-logo rounded" src="{{ url_for('static', filename=provider.filename) }}" width="40" height="40" alt="{{ provider.name }}" loading="lazy">
       <span class="provider-fallback small" hidden>{{ provider.name }} (icono no disponible)</span>
       <span class="provider-tooltip" aria-hidden="true">{{ provider.name }}</span>
     </span>
     {% else %}
     <span class="badge text-bg-secondary text-wrap">{{ provider.name }}</span>
     {% endif %}
-  {% else %}
-    <span>Sin disponibilidad confirmada</span>
   {% endfor %}
   </div>
 </li>
+{% endif %}
 {% endfor %}
+{% if not availability.found %}<li class="text-muted">Sin disponibilidad confirmada en Canadá.</li>{% endif %}
 </ul>
 <p><a href="https://www.themoviedb.org/{{ tmdb.media }}/{{ tmdb.id }}/watch?locale=CA" target="_blank" rel="noopener noreferrer">Ver disponibilidad en TMDB / JustWatch</a></p>
 {% if tmdb.backdrop_url %}

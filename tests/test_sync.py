@@ -45,7 +45,7 @@ class IncrementalSyncTests(unittest.TestCase):
 
     def test_excludes_categories_primary_secondary_and_existing_records(self):
         changed = copy.deepcopy(self.data)
-        for table in ("live_categories", "vod_categories", "series_categories"):
+        for table in ("vod_categories", "series_categories"):
             changed[table].extend([
                 {"category_id": "90", "category_name": "ADULTOS (XXX)"},
                 {"category_id": "91", "category_name": "S TERROR Y SUSPENSO"},
@@ -55,15 +55,13 @@ class IncrementalSyncTests(unittest.TestCase):
         changed["movies"][1]["category_id"] = "91"
         changed["movies"].append({"stream_id": 99, "name": "Forbidden", "category_id": "92"})
         changed["series"][0]["category_ids"] = [91]
-        changed["live_streams"][0]["category_id"] = "90"
         self.sync(changed)
         self.assertIsNone(self.store.detail("movies", "10"))
         self.assertIsNone(self.store.detail("movies", "11"))
         self.assertIsNone(self.store.detail("movies", "99"))
         self.assertIsNone(self.store.detail("series", "20"))
-        self.assertIsNone(self.store.detail("channels", "1"))
         self.assertEqual(self.store.query("movies")["total"], 2)
-        for kind in ("movies", "series", "channels"):
+        for kind in ("movies", "series"):
             self.assertEqual(len(self.store.categories(kind)), 2)
         self.assertEqual(self.store.sync_report["movies"]["excluded"], 3)
         self.assertEqual(self.store.sync_report["movies"]["removed_excluded"], 2)

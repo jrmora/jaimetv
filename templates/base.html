@@ -15,12 +15,10 @@
       {% if not config.AUTH_ENABLED or auth_logged_in %}
       <div class="site-nav-links d-flex flex-wrap gap-3">
         {% for key, label in labels.items() %}
-        {% if key == 'channels' %}
-        <a class="nav-link text-body {% if active == 'kids' %}fw-bold{% endif %}" {% if active == 'kids' %}aria-current="page"{% endif %} href="{{ url_for('kids_listing', kind='movies') }}">Niños</a>
-        <a class="nav-link text-body {% if active == 'foreign' %}fw-bold{% endif %}" {% if active == 'foreign' %}aria-current="page"{% endif %} href="{{ url_for('listing', kind='movies', foreign=1) }}">Otros alfabetos</a>
-        {% endif %}
         <a class="nav-link text-body {% if active == key %}fw-bold{% endif %}" {% if active == key %}aria-current="page"{% endif %} href="{{ url_for('listing', kind=key) }}">{{ label }}</a>
         {% endfor %}
+        <a class="nav-link text-body {% if active == 'kids' %}fw-bold{% endif %}" {% if active == 'kids' %}aria-current="page"{% endif %} href="{{ url_for('kids_listing', kind='movies') }}">Niños</a>
+        <a class="nav-link text-body {% if active == 'foreign' %}fw-bold{% endif %}" {% if active == 'foreign' %}aria-current="page"{% endif %} href="{{ url_for('listing', kind='movies', foreign=1) }}">Otros alfabetos</a>
         <a class="nav-link text-body {% if active == 'admin' %}fw-bold{% endif %}" href="{{ url_for('administration') }}" {% if active == 'admin' %}aria-current="page"{% endif %}>Administración</a>
       </div>
       {% endif %}

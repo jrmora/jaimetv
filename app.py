@@ -22,7 +22,7 @@ from auth import configure_auth
 from updater import read_state, write_state
 
 
-LABELS = {"movies": "Películas", "series": "Series", "channels": "Canales"}
+LABELS = {"movies": "Películas", "series": "Series"}
 DEFAULT_DB = Path(__file__).resolve().parent / "catalog.db"
 
 
@@ -208,6 +208,10 @@ def create_app(db_path=None):
             abort(400, description="El catálogo debe indicarse con foreign=0 o foreign=1.")
         sort = request.args.get("sort", "desc")
         sort_by = request.args.get("sort_by", "rating")
+        if "ordering" in request.args:
+            sort_by, separator, sort = request.args["ordering"].rpartition(":")
+            if not separator or sort not in {"asc", "desc"}:
+                abort(400, description="Ordenamiento inválido.")
         if sort_by not in SORT_COLUMNS:
             abort(400, description="Columna de ordenamiento inválida.")
         q = request.args.get("q", "").strip()
@@ -226,7 +230,7 @@ def create_app(db_path=None):
         if any(value not in MOVIE_ERAS for value in eras) or (eras and kind not in {None, "movies"}):
             abort(400, description="Época de películas inválida.")
         tmdb_status = request.args.get("tmdb_status", "all")
-        if tmdb_status not in TMDB_STATUSES or (kind == "channels" and tmdb_status != "all"):
+        if tmdb_status not in TMDB_STATUSES:
             abort(400, description="Estado TMDB inválido.")
         watched = request.args.get("watched", "unseen" if kind == "movies" else "all")
         banned = request.args.get("banned", "hide")
@@ -234,8 +238,6 @@ def create_app(db_path=None):
             abort(400, description="Filtro de películas bloqueadas inválido.")
         if watched not in {"all", "seen", "unseen"} or (kind not in {None, "movies"} and watched != "all"):
             abort(400, description="Filtro de películas vistas inválido.")
-        if kind == "channels" and (providers or mine != "0"):
-            abort(400, description="Las plataformas TMDB solo se aplican a películas y series.")
         if len(categories) > 100 or len(genres) > 100 or any(len(value) > 200 for value in categories + genres):
             abort(400, description="Selecciona hasta 100 categorías y géneros de hasta 200 caracteres.")
         if children == "exclude" and request.endpoint in {"listing", "catalog_api"}:
@@ -319,12 +321,12 @@ def create_app(db_path=None):
                 dates["application"] = datetime.fromtimestamp(timestamp, timezone.utc).isoformat(timespec="seconds")
         return render_template(
             "admin.html", labels=LABELS, active="admin", kind=kind,
-            coverage=store.tmdb_coverage(kind), maintenance_dates=dates,
+            coverages={value: store.tmdb_coverage(value) for value in ("movies", "series")},
+            maintenance_dates=dates,
         )
 
     @app.get("/movies", defaults={"kind": "movies"})
     @app.get("/series", defaults={"kind": "series"})
-    @app.get("/channels", defaults={"kind": "channels"})
     @app.get("/kids/<kind>", endpoint="kids_listing")
     def listing(kind):
         if kind not in KINDS:
@@ -335,14 +337,12 @@ def create_app(db_path=None):
             filters.update(children="only", foreign=0)
         elif filters["children"] == "only":
             return redirect(url_for("kids_listing", kind=kind, **filters))
-        if kind == "channels":
-            filters["foreign"] = 0
         view = presentation()
         result = store.query(kind, **filters, page=page_number())
         card_provider_icons(result)
         filters.update(view=view, page=result.get("page", 1))
         foreign = bool(filters["foreign"])
-        categories = store.categories(kind)
+        categories = []
         if kids:
             categories = [item for item in categories if item["category_name"].casefold() in {
                 name.casefold() for name in CHILDREN_CATEGORIES[kind]
@@ -381,7 +381,7 @@ def create_app(db_path=None):
         filters["page"] = page_number()
         if kind in {"movies", "series"}:
             session.setdefault("tmdb_csrf", secrets.token_urlsafe(32))
-        filters["foreign"] = int(non_latin_title(record["name"])) if kind != "channels" else 0
+        filters["foreign"] = int(non_latin_title(record["name"]))
         display_data = {
             key: value for key, value in record["data"].items()
             if key not in {"stream_icon", "cover", "backdrop_path"}
@@ -487,8 +487,8 @@ def create_app(db_path=None):
                 url_for("kids_listing" if filters["children"] == "only" else "listing", kind=kind, **filters)
             ),
             category_endpoint="kids_listing" if filters["children"] == "only" else "listing",
-            labels=LABELS, active="kids" if filters["children"] == "only" else ("foreign" if filters["foreign"] and kind != "channels" else kind),
-            category_foreign=int(non_latin_title(record["name"])) if kind != "channels" else 0,
+            labels=LABELS, active="kids" if filters["children"] == "only" else ("foreign" if filters["foreign"] else kind),
+            category_foreign=int(non_latin_title(record["name"])),
         ))
         response.headers["Cache-Control"] = "no-store"
         return response

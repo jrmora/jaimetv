@@ -20,7 +20,7 @@ async function fixture(image = null, replacements = []) {
   const content = {
     textContent: "",
     image: null,
-    querySelector() { return this.image; },
+    querySelector(selector) { return selector === ".tmdb-backdrop" ? this.image : null; },
     querySelectorAll() { return nextFields.map(name => ({ dataset: { replacesField: name } })); },
     replaceChildren(...nodes) { this.image = nodes[0] || null; },
     addEventListener() {},
@@ -38,7 +38,7 @@ async function fixture(image = null, replacements = []) {
   let failure = false;
   runInNewContext(script, {
     document: {
-      querySelector() { return section; },
+      querySelector(selector) { return selector === "#tmdb-section" ? section : null; },
       querySelectorAll(selector) { return selector === "[data-original-backdrop]" ? originals : fields; },
     },
     fetch: async () => {

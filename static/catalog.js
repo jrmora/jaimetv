@@ -64,7 +64,7 @@ form.addEventListener("submit", (event) => {
   event.preventDefault();
   load();
 });
-for (const input of form.querySelectorAll('input[type="search"][name]')) {
+for (const input of document.querySelectorAll('input[type="search"][name][form="filters"], #filters input[type="search"][name]')) {
   input.addEventListener("input", () => {
     clearTimeout(timer);
     controller?.abort();
@@ -77,7 +77,7 @@ for (const select of form.querySelectorAll("select")) {
   select.addEventListener("change", () => load());
 }
 form.querySelector("#children-toggle")?.addEventListener("change", () => load());
-for (const input of form.querySelectorAll('.filter-chips input, .provider-options input, input[name="watched"]')) {
+for (const input of form.querySelectorAll('.filter-chips input, .provider-options input, input[name="watched"], input[name="my_services"]')) {
   input.addEventListener("change", () => load());
 }
 cardResults.addEventListener("click", (event) => {

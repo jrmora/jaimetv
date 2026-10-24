@@ -44,7 +44,18 @@
         {% endfor %}
       </div>
       <h3 class="h6">Cobertura TMDB</h3>
-      <p>{{ coverage.checked }} de {{ coverage.total }} títulos consultados en este catálogo (todos los filtros). {{ coverage.matched }} asociados, {{ coverage.candidates }} por elegir y {{ coverage.missing }} sin coincidencia. {{ coverage.pending }} pendientes.</p>
+      <p class="small text-muted">Totales de cada catálogo completo, independientemente de los filtros y del catálogo elegido para el lote.</p>
+      <div class="table-responsive">
+        <table class="table table-sm align-middle">
+          <caption>Estado de consultas TMDB por catálogo</caption>
+          <thead><tr><th scope="col">Catálogo</th><th scope="col">Total</th><th scope="col">Consultados</th><th scope="col">Asociados</th><th scope="col">Por elegir</th><th scope="col">Sin coincidencia</th><th scope="col">Pendientes</th></tr></thead>
+          <tbody>
+            {% for catalog_kind, counts in coverages.items() %}
+            <tr data-coverage-kind="{{ catalog_kind }}"><th scope="row">{{ labels[catalog_kind] }}</th><td>{{ counts.total }}</td><td>{{ counts.checked }}</td><td>{{ counts.matched }}</td><td><a href="{{ url_for('listing', kind=catalog_kind, tmdb_status='candidates', children='all', foreign=0, watched='all') }}" aria-label="{{ labels[catalog_kind] }} por elegir: {{ counts.candidates }}">{{ counts.candidates }}</a></td><td>{{ counts.missing }}</td><td>{{ counts.pending }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       <form id="tmdb-batch-controls">
         <label for="tmdb-kind" class="form-label">Catálogo</label>
         <select id="tmdb-kind" class="form-select mb-3">
@@ -55,11 +66,11 @@
         <label for="tmdb-batch-limit" class="form-label">Títulos pendientes por lote (1–500)</label>
         <input id="tmdb-batch-limit" type="number" min="1" max="500" value="50" class="form-control mb-3" required>
         <div class="d-flex flex-wrap gap-2">
-          <button id="tmdb-directory" type="button" class="btn btn-outline-secondary">Actualizar plataformas de Canadá</button>
           <button id="tmdb-batch-start" type="submit" class="btn btn-outline-primary">Consultar pendientes con TMDB</button>
           <button id="tmdb-batch-cancel" type="button" class="btn btn-outline-danger" hidden>Detener después de la consulta actual</button>
         </div>
       </form>
+      <p class="small text-muted mt-2">Cada lote actualiza primero las plataformas de Canadá y después consulta los títulos pendientes del catálogo seleccionado.</p>
       <p id="tmdb-batch-status" class="mt-3" role="status" aria-live="polite" hidden></p>
     </div>
   </section>

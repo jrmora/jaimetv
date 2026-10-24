@@ -30,7 +30,7 @@ class TMDBPeopleTests(unittest.TestCase):
             **fields,
         })
 
-    def test_tmdb_people_precede_source_and_missing_fields_fall_back_independently(self):
+    def test_tmdb_people_are_exclusive_without_provider_fallback(self):
         self.cache(cast=[{"name": "Élodie Willis", "character": "The Hero"}], directors=["Terry Gilliam"])
         self.assertEqual(self.store.query("movies", actor="élOD", director="gILLI")["total"], 1)
         self.assertEqual(self.store.query("movies", actor="IPTV")["total"], 0)
@@ -39,16 +39,16 @@ class TMDBPeopleTests(unittest.TestCase):
         self.assertEqual(self.store.query("movies", person="ÉLODIE WILLIS")["total"], 1)
         self.assertEqual(self.store.query("movies", person="Élodie")["total"], 0)
         self.cache(cast=[], directors=["Terry Gilliam"])
-        self.assertEqual(self.store.query("movies", actor="IPTV", director="terry")["total"], 1)
+        self.assertEqual(self.store.query("movies", actor="IPTV", director="terry")["total"], 0)
         self.cache(cast=[{"name": "New Actor"}], directors=[])
-        self.assertEqual(self.store.query("movies", actor="New", director="IPTV")["total"], 1)
+        self.assertEqual(self.store.query("movies", actor="New", director="IPTV")["total"], 0)
         self.assertEqual(self.store.detail("movies", "10")["data"], self.data["movies"][0])
 
-    def test_unconfirmed_other_country_and_stale_data_do_not_override_source(self):
+    def test_unconfirmed_other_country_and_stale_data_are_not_filterable(self):
         for status in ("candidates", "missing"):
             self.cache(status=status, cast=[{"name": "Wrong Actor"}])
             self.assertEqual(self.store.query("movies", actor="Wrong")["total"], 0)
-            self.assertEqual(self.store.query("movies", actor="IPTV")["total"], 1)
+            self.assertEqual(self.store.query("movies", actor="IPTV")["total"], 0)
         self.cache(country="US", cast=[{"name": "Wrong Actor"}])
         self.assertEqual(self.store.query("movies", actor="Wrong")["total"], 0)
         self.cache(cast=[{"name": "Wrong Actor"}])
@@ -56,7 +56,7 @@ class TMDBPeopleTests(unittest.TestCase):
         changed["movies"][0]["name"] = "Different identity"
         self.store.replace(changed)
         self.assertEqual(self.store.query("movies", actor="Wrong")["total"], 0)
-        self.assertEqual(self.store.query("movies", actor="IPTV")["total"], 1)
+        self.assertEqual(self.store.query("movies", actor="IPTV")["total"], 0)
 
     def test_clickable_cast_directors_creators_and_exact_person_results(self):
         actor = 'Actor & <Name>'

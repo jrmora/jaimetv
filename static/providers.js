@@ -3,22 +3,14 @@
 (() => {
   const panel = document.querySelector("#provider-filter");
   if (!panel) return;
-  const options = [...panel.querySelectorAll(".provider-option")];
   const services = JSON.parse(panel.dataset.subscriptions);
 
-  panel.querySelector("#my-services-toggle").addEventListener("change", () => {
-    panel.querySelector("#my-services-warning").hidden =
-      panel.querySelector("#my-services-toggle").value !== "1" || services.length > 0;
-  });
-  panel.querySelector("#provider-search").addEventListener("input", event => {
-    const query = event.target.value.trim().toLocaleLowerCase();
-    let visible = 0;
-    for (const option of options) {
-      option.hidden = !option.dataset.providerName.toLocaleLowerCase().includes(query);
-      if (!option.hidden) visible += 1;
-    }
-    panel.querySelector("#provider-search-empty").hidden = visible > 0;
-  });
+  for (const radio of panel.querySelectorAll('input[name="my_services"]')) {
+    radio.addEventListener("change", () => {
+      panel.querySelector("#my-services-warning").hidden =
+        radio.value !== "1" || services.length > 0;
+    });
+  }
   function showLogoError(image) {
     image.hidden = true;
     const fallback = image.nextElementSibling;

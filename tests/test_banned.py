@@ -86,7 +86,7 @@ class BannedMoviesTests(unittest.TestCase):
         self.assertNotIn('class="banned-form', payload["html"])
         self.assertIn("banned=only", payload["html"])
         self.assertEqual(self.client.get("/api/catalog/movies?q=Batman").json["total"], 0)
-        for path in ("/series", "/channels", "/catalog/series/detail?id=20"):
+        for path in ("/series", "/catalog/series/detail?id=20"):
             html = self.client.get(path).get_data(as_text=True)
             self.assertNotIn('class="banned-form', html)
             self.assertNotIn('id="banned-filter"', html)
@@ -102,7 +102,7 @@ class BannedMoviesTests(unittest.TestCase):
         self.assertEqual((payload["total"], payload["pages"], payload["page"]), (50, 1, 1))
         self.assertEqual(len(payload["items"]), 50)
         self.assertTrue(all(not item["banned"] for item in payload["items"]))
-        self.assertEqual(self.store.query("movies", banned="only", category="2")["total"], 0)
+        self.assertEqual(self.store.query("movies", banned="only", genre="Drama")["total"], 0)
         self.store.set_movie_watched("50", True)
         self.assertEqual(self.store.query("movies", banned="only", watched="seen")["total"], 1)
         self.assertEqual(self.store.query("movies", watched="seen")["total"], 0)
@@ -115,6 +115,10 @@ class BannedMoviesTests(unittest.TestCase):
             {"stream_id": 41, "name": "映画", "category_id": "1"},
         ]
         self.store.replace(self.data)
+        raw = self.store.detail("movies", "40")["data"]
+        self.store.save_tmdb("movies", "40", "CA", fingerprint(raw), {
+            "status": "matched", "genres": ["Familia"],
+        })
         self.ban(record_id="40")
         self.ban(record_id="41")
         for path, title in (("/kids/movies", "Kids movie"), ("/movies?foreign=1", "映画")):
@@ -129,7 +133,7 @@ class BannedMoviesTests(unittest.TestCase):
         self.assertEqual(self.ban(record_id="missing").status_code, 404)
         self.assertEqual(self.client.get("/catalog/movies/10/banned").status_code, 405)
         self.assertFalse(self.store.detail("movies", "10")["banned"])
-        for path in ("/movies?banned=all", "/series?banned=only", "/api/catalog/channels?banned=only"):
+        for path in ("/movies?banned=all", "/series?banned=only"):
             self.assertEqual(self.client.get(path).status_code, 400)
         with self.assertRaises(ValueError):
             self.store.set_movie_banned("10", "1")

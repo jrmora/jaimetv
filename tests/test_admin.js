@@ -6,10 +6,10 @@ const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
 
-test("admin submits selected catalog, limit, directory and cancellation with CSRF", async () => {
+test("admin submits a single batch action and cancellation with CSRF", async () => {
   const elements = {};
   for (const id of ["tmdb-batch-status", "tmdb-batch-controls", "tmdb-batch-start",
-    "tmdb-directory", "tmdb-batch-cancel", "tmdb-kind", "tmdb-batch-limit"]) {
+    "tmdb-batch-cancel", "tmdb-kind", "tmdb-batch-limit"]) {
     elements[`#${id}`] = {
       handlers: {}, classList: { toggle() {} }, setAttribute() {},
       addEventListener(event, handler) { this.handlers[event] = handler; },
@@ -42,13 +42,11 @@ test("admin submits selected catalog, limit, directory and cancellation with CSR
   assert.equal(posts[0].get("kind"), "series");
   assert.equal(posts[0].get("limit"), "25");
   assert.equal(posts[0].get("csrf"), "csrf-token");
-  await elements["#tmdb-directory"].handlers.click();
-  await flush();
-  assert.equal(posts[1].get("action"), "directory");
+  assert.equal(posts[0].get("action"), "start");
   await elements["#tmdb-batch-cancel"].handlers.click();
-  assert.equal(posts[2].get("action"), "cancel");
+  assert.equal(posts[1].get("action"), "cancel");
   state = { status: "running", phase: "platforms" };
-  await elements["#tmdb-directory"].handlers.click();
+  elements["#tmdb-batch-controls"].handlers.submit({ preventDefault() {} });
   await flush();
   state = { status: "completed" };
   await timers.shift()();

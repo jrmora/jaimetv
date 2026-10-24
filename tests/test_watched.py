@@ -64,7 +64,7 @@ class WatchedMoviesTests(unittest.TestCase):
         html = self.client.get("/movies?watched=all").get_data(as_text=True)
         self.assertIn('id="watched-all" value="all" checked', html)
         self.assertEqual(self.client.get("/series").status_code, 200)
-        self.assertEqual(self.client.get("/channels").status_code, 200)
+        self.assertEqual(self.client.get("/channels").status_code, 404)
 
     def test_sync_preserves_marks_and_tmdb(self):
         self.mark()
@@ -93,7 +93,7 @@ class WatchedMoviesTests(unittest.TestCase):
         self.assertEqual((first["total"], first["pages"], len(first["items"])), (60, 2, 50))
         self.assertEqual(len(second["items"]), 10)
         self.assertTrue(all(item["watched"] for item in first["items"] + second["items"]))
-        self.assertEqual(self.store.query("movies", watched="seen", category="2")["total"], 0)
+        self.assertEqual(self.store.query("movies", watched="seen", genre="Drama")["total"], 0)
         self.assertEqual(self.store.query("movies", watched="unseen", q="Movie 119")["total"], 1)
         self.store.set_movie_watched("59", False)
         self.assertEqual(self.store.query("movies", watched="seen", page=999)["page"], 2)
@@ -101,6 +101,10 @@ class WatchedMoviesTests(unittest.TestCase):
     def test_initial_async_detail_and_person_buttons_have_csrf(self):
         self.data["movies"][0]["cast"] = "An Actor"
         self.store.replace(self.data)
+        raw = self.store.detail("movies", "10")["data"]
+        self.store.save_tmdb("movies", "10", "CA", fingerprint(raw), {
+            "status": "matched", "cast": [{"name": "An Actor"}],
+        })
         self.mark()
         for path in ("/movies?watched=seen", "/catalog/movies/detail?id=10&watched=seen",
                      "/people?name=An+Actor"):
@@ -116,7 +120,7 @@ class WatchedMoviesTests(unittest.TestCase):
         html = self.client.get("/movies?watched=all").get_data(as_text=True)
         self.assertIn("Películas que no he visto", html)
         self.assertIn("Volver a ver", html)
-        for path in ("/series", "/channels", "/catalog/series/detail?id=20"):
+        for path in ("/series", "/catalog/series/detail?id=20"):
             html = self.client.get(path).get_data(as_text=True)
             self.assertNotIn('class="watched-form', html)
             self.assertNotIn('id="watched-seen"', html)
@@ -128,6 +132,10 @@ class WatchedMoviesTests(unittest.TestCase):
             {"stream_id": 41, "name": "映画", "category_id": "1"},
         ])
         self.store.replace(self.data)
+        raw = self.store.detail("movies", "40")["data"]
+        self.store.save_tmdb("movies", "40", "CA", fingerprint(raw), {
+            "status": "matched", "genres": ["Familia"],
+        })
         self.mark("40")
         self.mark("41")
         for path, title in (("/kids/movies?watched=seen", "Kids movie"),
@@ -143,7 +151,7 @@ class WatchedMoviesTests(unittest.TestCase):
         self.assertEqual(self.client.get("/catalog/movies/10/watched").status_code, 405)
         self.assertFalse(self.store.detail("movies", "10")["watched"])
         for path in ("/movies?watched=bad", "/api/catalog/movies?watched=bad",
-                     "/series?watched=seen", "/channels?watched=unseen"):
+                     "/series?watched=seen"):
             self.assertEqual(self.client.get(path).status_code, 400)
         with self.assertRaises(ValueError):
             self.store.query("series", watched="seen")

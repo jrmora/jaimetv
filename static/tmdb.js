@@ -61,6 +61,12 @@
       if (!response.ok) throw new Error(result.error || `HTTP ${response.status}`);
       const html = new DOMParser().parseFromString(result.html, "text/html");
       content.replaceChildren(...html.body.childNodes);
+      const scoreSlot = document.querySelector("#detail-score");
+      const score = content.querySelector(".tmdb-score");
+      if (scoreSlot) {
+        scoreSlot.replaceChildren(...(score ? [score] : []));
+        scoreSlot.hidden = !score;
+      }
       const labels = document.querySelector("#content-labels");
       if (labels && typeof result.content_labels === "string") {
         const labelHtml = new DOMParser().parseFromString(result.content_labels, "text/html");
