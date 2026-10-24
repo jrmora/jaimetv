@@ -189,6 +189,33 @@ aplicación, también para bases existentes, sin borrar datos. Para respaldar un
 base en uso se debe usar la API de backup de SQLite (como hace el actualizador),
 no copiar solo el archivo principal: puede haber cambios en archivos `-wal`.
 
+### Diagnóstico de lentitud
+
+Las respuestas de Flask incluyen `X-Request-ID` y `Server-Timing`, visibles
+en la pestaña Red del navegador. Se miden el tiempo total del servidor,
+el tiempo dentro de conexiones SQLite (`sqlite`), el cierre de
+transacciones (`commit`, incluida reversión en caso de error), y las fases de consulta `rating_mean`, `count`
+y `select_rows`. Cuando se consulta TMDB también aparecen `tmdb_wait`
+(espera del limitador) y `tmdb_http` (petición externa). Las fases SQL están
+incluidas en `sqlite`, no se deben sumar a este para calcular el total.
+El tiempo total no incluye la espera anterior a la entrada en Flask,
+el transporte al navegador ni la descarga de portadas.
+
+Cada petición dinámica genera una línea `performance` en los registros:
+INFO normalmente y WARNING si tarda al menos un segundo. Se registra el
+endpoint, método, estado, identificador y tiempos, sin parámetros de búsqueda,
+cookies, credenciales ni cuerpos de petición. No se crean archivos de log
+adicionales. En Oracle se consultan con:
+
+```bash
+sudo journalctl -u catalogo-iptv --since "10 minutes ago" --no-pager | grep performance
+```
+
+Si una búsqueda tarda segundos antes de recibir el HTML aunque devuelva pocas
+tarjetas, el problema no es el límite de 50 tarjetas. La búsqueda infantil
+filtra primero los géneros infantiles antes de analizar personas y reutiliza
+la asociación TMDB ya enlazada en vez de volver a buscarla por cada campo.
+
 En Administración, «Ver películas bloqueadas» abre el catálogo de películas
 marcadas «No me interesa», con controles para desbloquearlas. No se añade un
 selector de bloqueadas al panel de filtros.

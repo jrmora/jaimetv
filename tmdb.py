@@ -15,7 +15,7 @@ from urllib.parse import urlencode
 
 import requests
 
-from catalog import fingerprint, youtube_trailer_url
+from catalog import fingerprint, youtube_trailer_url, record_timing
 
 
 COUNTRY = "CA"
@@ -151,8 +151,14 @@ class TMDBClient:
             raise TMDBError("Completa las credenciales en tmdb.local.json.")
 
     def get(self, path, params=None):
+        waiting = time.perf_counter()
         with REQUEST_GATE.request():
-            return self._get(path, params)
+            record_timing("tmdb_wait", waiting)
+            started = time.perf_counter()
+            try:
+                return self._get(path, params)
+            finally:
+                record_timing("tmdb_http", started)
 
     def _get(self, path, params=None):
         params = dict(params or {})

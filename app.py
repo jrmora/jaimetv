@@ -1,18 +1,20 @@
 import argparse
 import json
+import logging
 import os
 import re
 import secrets
 import sqlite3
 import sys
 import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
 from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
 
-from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image
+from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image, PERFORMANCE_TIMINGS
 from xtream import CatalogError, XtreamClient
 from tmdb import TMDBClient, TMDBError, TMDBRateLimitError, enrich, fingerprint, recommended_titles
 from provider_logos import provider_icons
@@ -28,7 +30,16 @@ DEFAULT_DB = Path(__file__).resolve().parent / "catalog.db"
 
 def create_app(db_path=None):
     app = Flask(__name__)
+    app.logger.setLevel(logging.INFO)
     app.secret_key = secrets.token_hex(32)
+
+    @app.before_request
+    def start_performance_measurement():
+        g.performance_started = time.perf_counter()
+        g.performance_id = secrets.token_hex(8)
+        g.performance_timings = {}
+        g.performance_token = PERFORMANCE_TIMINGS.set(g.performance_timings)
+
     configure_auth(app)
     store = CatalogStore(db_path or os.environ.get("IPTV_DB_PATH", DEFAULT_DB))
     app.config["CATALOG_STORE"] = store
@@ -46,6 +57,29 @@ def create_app(db_path=None):
         except (OSError, ValueError):
             app.logger.error("No se pudo leer el estado de actualización.")
             abort(503, description="No se pudo consultar la actualización.")
+
+    @app.after_request
+    def report_performance(response):
+        if "performance_started" not in g:
+            return response
+        elapsed = (time.perf_counter() - g.performance_started) * 1000
+        timings = {**g.performance_timings, "total": elapsed}
+        response.headers["Server-Timing"] = ", ".join(
+            f"{name};dur={duration:.1f}" for name, duration in timings.items()
+        )
+        response.headers["X-Request-ID"] = g.performance_id
+        if request.endpoint != "static":
+            log = app.logger.warning if elapsed >= 1000 else app.logger.info
+            log("performance request_id=%s endpoint=%s method=%s status=%s %s",
+                g.performance_id, request.endpoint, request.method, response.status_code,
+                " ".join(f"{name}_ms={duration:.1f}" for name, duration in timings.items()))
+        return response
+
+    @app.teardown_request
+    def clear_performance_measurement(error):
+        token = g.pop("performance_token", None)
+        if token is not None:
+            PERFORMANCE_TIMINGS.reset(token)
 
     @app.before_request
     def pause_writes_during_update():

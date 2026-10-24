@@ -3,8 +3,10 @@ import json
 import math
 import re
 import sqlite3
+import time
 import unicodedata
 from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -13,6 +15,15 @@ import pandas as pd
 
 from xtream import ACTIONS, CatalogError
 from platforms import platform_name
+
+
+PERFORMANCE_TIMINGS: ContextVar[dict[str, float] | None] = ContextVar("catalog_performance_timings", default=None)
+
+
+def record_timing(name: str, started: float) -> None:
+    timings = PERFORMANCE_TIMINGS.get()
+    if timings is not None:
+        timings[name] = timings.get(name, 0) + (time.perf_counter() - started) * 1000
 
 
 KINDS = {
@@ -439,6 +450,7 @@ class CatalogStore:
 
     @contextmanager
     def connect(self):
+        started = time.perf_counter()
         db = sqlite3.connect(self.path, timeout=30)
         db.row_factory = sqlite3.Row
         db.create_function("NON_LATIN_TITLE", 1, non_latin_title, deterministic=True)
@@ -460,11 +472,18 @@ class CatalogStore:
                 for person in people_names(json.loads(raw).get(field))
             }, deterministic=True,
         )
+        committing = None
         try:
             with db:
-                yield db
+                try:
+                    yield db
+                finally:
+                    committing = time.perf_counter()
         finally:
+            if committing is not None:
+                record_timing("commit", committing)
             db.close()
+            record_timing("sqlite", started)
 
     def replace(self, snapshot):
         return self._write_snapshot(snapshot)
@@ -691,14 +710,7 @@ class CatalogStore:
         watched_expression = "EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.stream_id)"
         if watched != "all":
             conditions.append(watched_expression if watched == "seen" else f"NOT {watched_expression}")
-        people_metadata = "s.raw_json"
-        if q or actor or director or person:
-            people_metadata = f"""PEOPLE_METADATA(s.raw_json, (
-                SELECT m.payload FROM tmdb_metadata m
-                WHERE m.kind='{kind}' AND m.record_id=s.{key} AND m.country='CA'
-                    AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                    AND json_extract(m.payload, '$.status')='matched'
-            ))"""
+        people_metadata = "PEOPLE_METADATA(NULL, score.payload)"
         if q:
             escaped = q.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
             expressions = (
@@ -723,7 +735,7 @@ class CatalogStore:
                 SELECT 1 FROM json_each(score.payload, '$.genres')
                 WHERE CASEFOLD(value) IN ('familia', 'animación', 'family', 'animation')
             )"""
-            conditions.append(membership if children == "only" else f"NOT {membership}")
+            conditions.insert(0, membership if children == "only" else f"NOT {membership}")
         if foreign is not None and children != "only" and kind in {"movies", "series"}:
             conditions.append("NON_LATIN_TITLE(s.name) = ?")
             params.append(int(bool(foreign)))
@@ -799,14 +811,19 @@ class CatalogStore:
                 projection_params.extend((kind, access, access, *selected_providers))
             query_params = list(params)
             if sort_by == "rating":
+                started = time.perf_counter()
                 mean = db.execute(f"SELECT AVG({tmdb_rating}) FROM {source}").fetchone()[0]
+                record_timing("rating_mean", started)
                 query_params.extend((mean, mean))
             if page is not None:
+                started = time.perf_counter()
                 total = db.execute(f"SELECT COUNT(*) FROM {source}{where}", params).fetchone()[0]
+                record_timing("count", started)
                 pages = max(1, (total + 49) // 50)
                 page = min(page, pages)
                 limit = "LIMIT ? OFFSET ?"
                 query_params.extend((50, (page - 1) * 50))
+            started = time.perf_counter()
             rows = db.execute(
                 f"""SELECT s.{key} AS id, s.name, s.category_id, {tmdb_rating} AS rating,
                            {votes} AS votes, {year} AS year, {watchlist_expression} AS watchlisted,
@@ -822,6 +839,7 @@ class CatalogStore:
                     """,
                 projection_params + query_params,
             ).fetchall()
+            record_timing("select_rows", started)
         items = []
         for row in rows:
             item = dict(row)

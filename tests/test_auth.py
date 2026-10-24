@@ -46,6 +46,8 @@ class AuthTests(unittest.TestCase):
                              ("post", "/catalog/movies/1/watched")):
             response = getattr(self.client, method)(path)
             self.assertEqual(response.status_code, 401)
+            self.assertIn("Server-Timing", response.headers)
+            self.assertIn("X-Request-ID", response.headers)
         with self.client.get("/static/theme.js") as response:
             self.assertEqual(response.status_code, 200)
 

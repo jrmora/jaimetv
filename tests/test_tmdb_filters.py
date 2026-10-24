@@ -2,11 +2,13 @@ import copy
 import re
 import tempfile
 import unittest
+from contextlib import contextmanager
 from html import unescape
 from pathlib import Path
+from unittest.mock import patch
 
 from app import create_app
-from catalog import fingerprint
+from catalog import fingerprint, effective_people
 from test_app import snapshot
 
 
@@ -43,6 +45,29 @@ class TMDBFilterTests(unittest.TestCase):
         self.assertNotIn('name="category"', page)
         self.assertIn("Géneros de TMDB", page)
         self.assertNotIn("CAST. ANIMACION", page)
+
+    def test_kids_search_does_not_parse_people_for_non_kids_titles(self):
+        data = snapshot()
+        data["movies"] = [{"stream_id": number, "name": f"Title {number}"} for number in range(30)]
+        self.store.replace(data)
+        for number in range(30):
+            self.cache(record_id=str(number), genres=["Familia" if number < 2 else "Drama"])
+        original_connect = self.store.connect
+        calls = []
+
+        @contextmanager
+        def counted_connect():
+            with original_connect() as db:
+                def people(raw, payload):
+                    calls.append(payload)
+                    return effective_people(raw, payload)
+                db.create_function("PEOPLE_METADATA", 2, people)
+                yield db
+
+        with patch.object(self.store, "connect", counted_connect):
+            result = self.store.query("movies", q="not-present", children="only", sort_by="rating", page=1)
+        self.assertEqual(result["total"], 0)
+        self.assertLessEqual(len(calls), 12)
 
     def test_rating_order_weights_votes_without_changing_displayed_score(self):
         for kind, key in (("movies", "stream_id"), ("series", "series_id")):
