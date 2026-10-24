@@ -55,7 +55,7 @@ class TrailerPlayerTests(unittest.TestCase):
             elif alternatives:
                 alternatives.pop(0)
 
-    def test_cached_trailer_is_lazy_and_invalid_urls_are_not_embedded(self):
+    def test_cached_trailer_is_preloaded_without_autoplay_and_invalid_urls_are_not_embedded(self):
         with tempfile.TemporaryDirectory() as directory:
             app = create_app(Path(directory) / "catalog.db")
             store = app.config["CATALOG_STORE"]
@@ -71,6 +71,10 @@ class TrailerPlayerTests(unittest.TestCase):
                 response = client.get("/api/tmdb/movies/10")
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual('data-video-id="nsuk8ThvnpM"' in response.json["html"], valid)
-                self.assertNotIn("<iframe", response.json["html"])
+                self.assertEqual("<iframe" in response.json["html"], valid)
+                self.assertNotIn("autoplay", response.json["html"])
+                self.assertNotIn("Ver tráiler</button>", response.json["html"])
+                if valid:
+                    self.assertIn('src="https://www.youtube-nocookie.com/embed/nsuk8ThvnpM"', response.json["html"])
             policy = client.get("/catalog/movies/detail?id=10").headers["Content-Security-Policy"]
             self.assertIn("frame-src https://www.youtube-nocookie.com;", policy)

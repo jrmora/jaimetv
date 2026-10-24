@@ -116,8 +116,7 @@
   </fieldset>
   {% endif %}
   <div class="d-flex flex-wrap gap-2">
-    <button class="btn btn-primary" type="submit">Buscar</button>
-    <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view, **({'watchlist': 1} if filters.get('watchlist') else {})) }}">Limpiar</a>
+    <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view, **({'watchlist': 1} if filters.get('watchlist') else {})) }}">Limpiar filtros</a>
   </div>
 </form>
 {% if kind in ['movies', 'series'] %}

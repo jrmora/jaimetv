@@ -146,9 +146,10 @@ ocupa todo el ancho, sin mantener una columna vacía debajo de la portada.
 La disponibilidad en Canadá solo muestra modalidades con plataformas conocidas,
 en grupos compactos con iconos. Si no hay ninguna, muestra un único aviso.
 
-«Ver tráiler» despliega un reproductor de YouTube dentro de la ficha. No se
-conecta con YouTube hasta pulsarlo; «Cerrar tráiler» retira el reproductor y
-detiene el vídeo. Se conserva un enlace externo por si el autor no permite
+El reproductor de YouTube se carga directamente dentro de la ficha, sin
+reproducción automática: basta pulsar el botón de reproducción del propio
+visor. Esto conecta con YouTube al cargar la información TMDB.
+Se conserva un enlace externo por si el autor no permite
 reproducción integrada. El reproductor puede mostrar publicidad.
 Al consultar la ficha TMDB se prioriza español latinoamericano, después otro
 español, inglés y finalmente el idioma original. Dentro de cada grupo se

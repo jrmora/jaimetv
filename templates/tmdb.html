@@ -64,8 +64,9 @@
   {% if tmdb.imdb_id and tmdb.imdb_id.startswith('tt') and tmdb.imdb_id[2:].isdigit() %}<tr><th scope="row">IMDb</th><td><a href="https://www.imdb.com/title/{{ tmdb.imdb_id }}/" target="_blank" rel="noopener noreferrer">{{ tmdb.imdb_id }}</a></td></tr>{% endif %}
   {% if trailer_id %}<tr class="tmdb-wide-row" data-replaces-field="youtube_trailer"><th scope="row">Tráiler</th><td>
     <div class="trailer-player" data-video-id="{{ trailer_id }}">
-      <button type="button" class="btn btn-outline-primary trailer-play" aria-expanded="false">Ver tráiler</button>
-      <div class="trailer-frame mt-2" hidden></div>
+      <div class="trailer-frame">
+        <iframe src="https://www.youtube-nocookie.com/embed/{{ trailer_id }}" title="Reproductor de tráiler de YouTube" allow="encrypted-media; fullscreen; picture-in-picture" referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
       <p class="small text-muted mt-2 mb-0">Si no se reproduce aquí, <a href="https://www.youtube.com/watch?v={{ trailer_id }}" target="_blank" rel="noopener noreferrer">ver en YouTube</a>. Puede contener publicidad.</p>
     </div>
     {% if not tmdb.trailer_official %}<span class="small text-muted">No marcado como oficial</span>{% endif %}
