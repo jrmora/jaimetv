@@ -48,21 +48,30 @@
       <div class="table-responsive">
         <table class="table table-sm align-middle">
           <caption>Estado de consultas TMDB por catálogo</caption>
-          <thead><tr><th scope="col">Catálogo</th><th scope="col">Total</th><th scope="col">Consultados</th><th scope="col">Asociados</th><th scope="col">Por elegir</th><th scope="col">Sin coincidencia</th><th scope="col">Pendientes</th></tr></thead>
+          <thead><tr><th scope="col">Catálogo</th><th scope="col">Total</th><th scope="col">Consultados</th><th scope="col">Asociados</th><th scope="col">Por elegir</th><th scope="col">Sin coincidencia</th><th scope="col">Pendientes</th><th scope="col">Progreso TMDB</th></tr></thead>
           <tbody>
             {% for catalog_kind, counts in coverages.items() %}
-            <tr data-coverage-kind="{{ catalog_kind }}"><th scope="row">{{ labels[catalog_kind] }}</th><td>{{ counts.total }}</td><td>{{ counts.checked }}</td><td>{{ counts.matched }}</td><td><a href="{{ url_for('listing', kind=catalog_kind, tmdb_status='candidates', children='all', foreign=0, watched='all') }}" aria-label="{{ labels[catalog_kind] }} por elegir: {{ counts.candidates }}">{{ counts.candidates }}</a></td><td>{{ counts.missing }}</td><td>{{ counts.pending }}</td></tr>
+            {% set percent = (100 * counts.checked / counts.total)|round(1) if counts.total else 0 %}
+            <tr data-coverage-kind="{{ catalog_kind }}"><th scope="row"><a href="{{ url_for('listing', kind=catalog_kind, children='all', watched='all') }}">{{ labels[catalog_kind] }}</a></th><td>{{ counts.total }}</td><td>{{ counts.checked }}</td><td>{{ counts.matched }}</td><td><a href="{{ url_for('listing', kind=catalog_kind, tmdb_status='candidates', children='all', foreign=0, watched='all') }}" aria-label="{{ labels[catalog_kind] }} por elegir: {{ counts.candidates }}">{{ counts.candidates }}</a></td><td>{{ counts.missing }}</td><td>{{ counts.pending }}</td>
+              <td>
+                <span>{{ percent }} %</span>
+                <progress class="tmdb-coverage-progress" value="{{ percent }}" max="100" aria-label="{{ labels[catalog_kind] }} consultadas en TMDB" aria-valuenow="{{ percent }}">{{ percent }} %</progress>
+              </td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
       <form id="tmdb-batch-controls">
-        <label for="tmdb-kind" class="form-label">Catálogo</label>
-        <select id="tmdb-kind" class="form-select mb-3">
+        <fieldset id="tmdb-kind" class="mb-3">
+          <legend class="fs-6">Catálogo</legend>
+          <div class="d-flex gap-2">
           {% for value in ['movies', 'series'] %}
-          <option value="{{ value }}" {% if kind == value %}selected{% endif %}>{{ labels[value] }}</option>
+          <input type="radio" class="btn-check" name="kind" id="tmdb-kind-{{ value }}" value="{{ value }}" {% if kind == value %}checked{% endif %} required>
+          <label class="btn btn-outline-primary" for="tmdb-kind-{{ value }}">{{ labels[value] }}</label>
           {% endfor %}
-        </select>
+          </div>
+        </fieldset>
         <label for="tmdb-batch-limit" class="form-label">Títulos pendientes por lote (1–500)</label>
         <input id="tmdb-batch-limit" type="number" min="1" max="500" value="50" class="form-control mb-3" required>
         <div class="d-flex flex-wrap gap-2">

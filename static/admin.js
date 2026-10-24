@@ -61,7 +61,7 @@
     clearTimeout(timer);
     start.disabled = true;
     try {
-      await request({ action: "start", kind: kind.value, limit: limit.value });
+      await request({ action: "start", kind: kind.querySelector('input:checked').value, limit: limit.value });
     } catch (error) {
       message(`No se pudo iniciar el proceso. ${error.message}`, true);
       start.disabled = false;

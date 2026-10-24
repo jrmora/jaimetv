@@ -6,10 +6,9 @@
 <div class="catalog-search mx-auto mb-3">
   <label for="q" class="visually-hidden">Buscar títulos, actores o directores</label>
   <div class="input-group input-group-lg">
-    <input id="q" name="q" form="filters" type="search" class="form-control" maxlength="200" value="{{ filters.q }}" placeholder="Busca un título, actor o director…" autocomplete="off" aria-describedby="search-help">
+    <input id="q" name="q" form="filters" type="search" class="form-control" maxlength="200" value="{{ filters.q }}" placeholder="Busca un título, actor o director…" autocomplete="off">
     <button class="btn btn-primary" type="submit" form="filters">Buscar</button>
   </div>
-  <p id="search-help" class="small text-muted mt-2 mb-0">Títulos y personas de TMDB. Se aplican los filtros seleccionados.</p>
 </div>
 {% if kids %}
 <div class="d-flex gap-3 mb-3">
@@ -62,7 +61,7 @@
         ('name', 'Nombre', 'A–Z', 'Z–A'),
         ('category_name', 'Género TMDB', 'A–Z', 'Z–A'),
         ('year', 'Año', 'Más antiguas primero', 'Más recientes primero'),
-        ('rating', 'Valoración', 'Menor a mayor', 'Mayor a menor')
+        ('rating', 'Valoración', 'Ponderada de menor a mayor', 'Más fiables primero')
       ] %}
       {% for direction, description in [('asc', ascending), ('desc', descending)] %}
       <option value="{{ column }}:{{ direction }}" {% if filters.sort_by == column and filters.sort == direction %}selected{% endif %}>{{ label }} · {{ description }}</option>

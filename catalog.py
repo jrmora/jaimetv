@@ -553,7 +553,11 @@ class CatalogStore:
             AND json_type(score.payload, '$.votes') IN ('integer', 'real')
             AND json_extract(score.payload, '$.votes') > 0
             THEN json_extract(score.payload, '$.rating') END"""
-        order = tmdb_rating if sort_by == "rating" else SORT_COLUMNS[sort_by]
+        votes = f"CASE WHEN ({tmdb_rating}) IS NOT NULL THEN json_extract(score.payload, '$.votes') END"
+        order = (
+            f"(({tmdb_rating}) * ({votes}) + 100.0 * ?) / (({votes}) + 100.0)"
+            if sort_by == "rating" else SORT_COLUMNS[sort_by]
+        )
         year = "RELEASE_YEAR(json_extract(score.payload, '$.release_date'))"
         genre_expression = "(SELECT group_concat(value, ', ') FROM json_each(score.payload, '$.genres'))"
         if sort_by == "year":
@@ -699,6 +703,9 @@ class CatalogStore:
                 ) AS matched_services"""
                 projection_params.extend((kind, access, access, *selected_providers))
             query_params = list(params)
+            if sort_by == "rating":
+                mean = db.execute(f"SELECT AVG({tmdb_rating}) FROM {source}").fetchone()[0]
+                query_params.extend((mean, mean))
             if page is not None:
                 total = db.execute(f"SELECT COUNT(*) FROM {source}{where}", params).fetchone()[0]
                 pages = max(1, (total + 49) // 50)
@@ -706,7 +713,8 @@ class CatalogStore:
                 limit = "LIMIT ? OFFSET ?"
                 query_params.extend((50, (page - 1) * 50))
             rows = db.execute(
-                f"""SELECT s.{key} AS id, s.name, s.category_id, {tmdb_rating} AS rating, {year} AS year,
+                f"""SELECT s.{key} AS id, s.name, s.category_id, {tmdb_rating} AS rating,
+                           {votes} AS votes, {year} AS year,
                            {genre_expression} AS genre, COALESCE(c.category_name, 'Sin categoría') AS category_name,
                            json_extract(s.raw_json, '$.youtube_trailer') AS youtube_trailer,
                            json_extract(s.raw_json, '$.stream_icon') AS preview_icon,

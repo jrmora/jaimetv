@@ -17,6 +17,9 @@
       <div class="d-flex align-items-center justify-content-between">
         <span class="small">TMDB: {{ item.rating|string + '/10' if item.rating is not none else '—' }}</span>
       </div>
+      {% if item.rating is not none %}
+      <p class="small text-muted mb-1">{{ item.votes }} votos{% if item.votes < 100 %} · Pocos votos{% endif %}</p>
+      {% endif %}
       {% if kind == 'movies' %}
       {{ watched_button(item.id, item.watched, sync_csrf, filters) }}
       {% endif %}

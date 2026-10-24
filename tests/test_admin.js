@@ -16,7 +16,7 @@ test("admin submits a single batch action and cancellation with CSRF", async () 
       reportValidity() { return true; },
     };
   }
-  elements["#tmdb-kind"].value = "series";
+  elements["#tmdb-kind"].querySelector = () => ({ value: "series" });
   elements["#tmdb-batch-limit"].value = "25";
   const posts = [];
   let state = { status: "idle" };
@@ -37,6 +37,7 @@ test("admin submits a single batch action and cancellation with CSRF", async () 
   });
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
+  assert.equal(elements["#tmdb-kind"].disabled, false);
   elements["#tmdb-batch-controls"].handlers.submit({ preventDefault() {} });
   await flush();
   assert.equal(posts[0].get("kind"), "series");
@@ -48,8 +49,10 @@ test("admin submits a single batch action and cancellation with CSRF", async () 
   state = { status: "running", phase: "platforms" };
   elements["#tmdb-batch-controls"].handlers.submit({ preventDefault() {} });
   await flush();
+  assert.equal(elements["#tmdb-kind"].disabled, true);
   state = { status: "completed" };
   await timers.shift()();
+  assert.equal(elements["#tmdb-kind"].disabled, false);
   timers.shift()();
   assert.equal(reloads, 1, "completion refreshes the persisted update dates");
 });

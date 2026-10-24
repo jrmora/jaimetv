@@ -44,6 +44,37 @@ class TMDBFilterTests(unittest.TestCase):
         self.assertIn("Géneros de TMDB", page)
         self.assertNotIn("CAST. ANIMACION", page)
 
+    def test_rating_order_weights_votes_without_changing_displayed_score(self):
+        for kind, key in (("movies", "stream_id"), ("series", "series_id")):
+            with self.subTest(kind=kind):
+                data = snapshot()
+                data[kind] = [
+                    {key: number, "name": f"Title {number}"}
+                    for number in range(1, 6)
+                ]
+                self.store.replace(data)
+                for number, score, votes in ((1, 10, 1), (2, 8, 2000), (3, 4, 100),
+                                              (4, 7, 100), (5, 10, 0)):
+                    self.cache(kind, str(number), rating=score, votes=votes)
+                descending = self.store.query(kind, sort_by="rating", sort="desc", page=1)
+                self.assertEqual([item["id"] for item in descending["items"]], ["2", "1", "4", "3", "5"])
+                self.assertEqual(descending["items"][1]["rating"], 10)
+                self.assertEqual(descending["items"][1]["votes"], 1)
+                ascending = self.store.query(kind, sort_by="rating", sort="asc")
+                self.assertEqual([item["id"] for item in ascending["items"]], ["3", "4", "1", "2", "5"])
+                page = self.client.get(f"/{kind}?children=all&watched=all").get_data(as_text=True)
+                self.assertIn("Más fiables primero", page)
+                self.assertEqual(page.count("Pocos votos"), 1)
+                html = self.client.get(f"/api/tmdb/{kind}/1").json["html"]
+                self.assertIn("Pocos votos", html)
+                html = self.client.get(f"/api/tmdb/{kind}/4").json["html"]
+                self.assertNotIn("Pocos votos", html)
+
+    def test_rating_order_handles_no_valid_scores(self):
+        result = self.store.query("movies", sort_by="rating", sort="desc", page=1)
+        self.assertEqual(result["total"], 4)
+        self.assertTrue(all(item["rating"] is None and item["votes"] is None for item in result["items"]))
+
     def test_unified_search_matches_title_actor_or_director(self):
         self.data["movies"] = [
             {"stream_id": 10, "name": "Corazón valiente"},

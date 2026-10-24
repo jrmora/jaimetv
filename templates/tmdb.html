@@ -27,6 +27,7 @@
     <p class="fw-bold mb-1">Puntuación de usuarios</p>
     {% if has_score %}
     <p class="mb-0"><strong>{{ tmdb.rating|round(1) }}/10</strong> · {{ tmdb.votes }} votos en TMDB</p>
+    {% if tmdb.votes < 100 %}<p class="small text-muted mb-0">Pocos votos</p>{% endif %}
     <span class="visually-hidden">{{ percent }} por ciento</span>
     {% else %}
     <p class="text-muted mb-0">Sin valoración disponible en TMDB</p>

@@ -18,14 +18,18 @@
         <a class="nav-link text-body {% if active == key %}fw-bold{% endif %}" {% if active == key %}aria-current="page"{% endif %} href="{{ url_for('listing', kind=key) }}">{{ label }}</a>
         {% endfor %}
         <a class="nav-link text-body {% if active == 'kids' %}fw-bold{% endif %}" {% if active == 'kids' %}aria-current="page"{% endif %} href="{{ url_for('kids_listing', kind='movies') }}">Niños</a>
-        <a class="nav-link text-body {% if active == 'foreign' %}fw-bold{% endif %}" {% if active == 'foreign' %}aria-current="page"{% endif %} href="{{ url_for('listing', kind='movies', foreign=1) }}">Otros alfabetos</a>
+        <a class="nav-link text-body {% if active == 'foreign' %}fw-bold{% endif %}" {% if active == 'foreign' %}aria-current="page"{% endif %} href="{{ url_for('listing', kind='movies', foreign=1) }}" aria-label="Otros alfabetos" title="Otros alfabetos"><span aria-hidden="true">文 · Я · ع</span></a>
         <a class="nav-link text-body {% if active == 'admin' %}fw-bold{% endif %}" href="{{ url_for('administration') }}" {% if active == 'admin' %}aria-current="page"{% endif %}>Administración</a>
       </div>
       {% endif %}
       {% if config.AUTH_ENABLED and auth_logged_in %}
       <form method="post" action="{{ url_for('logout') }}">
         <input type="hidden" name="csrf" value="{{ sync_csrf }}">
-        <button class="btn btn-outline-secondary" type="submit">Cerrar sesión</button>
+        <button class="btn btn-outline-secondary icon-button" type="submit" aria-label="Cerrar sesión" title="Cerrar sesión">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false">
+            <path d="M9 3H4v18h5m6-14 5 5-5 5M9 12h11"/>
+          </svg>
+        </button>
       </form>
       {% endif %}
       <button id="theme-toggle" type="button" class="btn btn-outline-secondary" aria-label="Modo oscuro" aria-pressed="false" title="Cambiar tema" hidden><span id="theme-icon" aria-hidden="true">☾</span></button>

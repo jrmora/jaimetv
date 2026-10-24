@@ -62,7 +62,15 @@ al pasar el cursor o enfocar el icono; los planes y canales no se fusionan.
 
 ### Filtro «Dónde se puede ver»
 
-El orden web predeterminado es valoración descendente y, en caso de empate,
+El orden web predeterminado es «Valoración · Más fiables primero». Para ordenar,
+se usa `(votos × nota + 100 × media) / (votos + 100)`, donde la media es la
+media de notas válidas del catálogo correspondiente (películas o series),
+sin depender de los filtros activos. Solo cuentan asociaciones TMDB vigentes
+con nota entre 0 y 10 y votos positivos. Las notas sin votos quedan al final.
+No requiere consultas nuevas a TMDB ni modifica los datos guardados.
+Las tarjetas y fichas conservan la nota real, muestran el número de votos e
+indican «Pocos votos» cuando hay menos de 100.
+En caso de empate en la puntuación ponderada,
 año descendente (más recientes primero). Los valores ausentes quedan al final.
 Puedes cambiar el orden desde los filtros.
 Las notas de tarjetas y del ordenamiento son exclusivamente de TMDB:

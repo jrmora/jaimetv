@@ -87,12 +87,33 @@ class AdministrationTests(unittest.TestCase):
         })
         page = self.client.get("/admin").get_data(as_text=True)
         self.assertEqual(page.count("Sin registro de actualizaci"), 4)
+        self.assertEqual(page.count('aria-valuenow="0"'), 2)
+
+    def test_coverage_percentage_counts_all_consulted_statuses(self):
+        store = self.app.config["CATALOG_STORE"]
+        store.replace(snapshot())
+        for record_id, status in (("10", "matched"), ("11", "candidates"), ("12", "missing")):
+            raw = store.detail("movies", record_id)["data"]
+            store.save_tmdb("movies", record_id, "CA", fingerprint(raw), {"status": status})
+        page = self.client.get("/admin").get_data(as_text=True)
+        self.assertIn('aria-valuenow="75.0"', page)
+        self.assertIn("75.0 %", page)
+        self.assertIn('value="75.0" max="100"', page)
+        self.assertNotIn('style="width:', page)
 
     def test_coverage_separates_movies_and_series_regardless_of_selected_tab(self):
         store = self.app.config["CATALOG_STORE"]
         store.replace(snapshot())
         for kind in ("movies", "series"):
             page = self.client.get(f"/admin?kind={kind}").get_data(as_text=True)
+            for catalog_kind, label in (("movies", "Películas"), ("series", "Series")):
+                link = re.search(rf'<th scope="row"><a href="([^"]+)">{label}</a></th>', page)
+                self.assertIsNotNone(link)
+                url = unescape(link.group(1))
+                self.assertEqual(urlsplit(url).path, f"/{catalog_kind}")
+                self.assertEqual(parse_qs(urlsplit(url).query), {"children": ["all"], "watched": ["all"]})
+                self.assertEqual(self.client.get(url).status_code, 200)
+            page = re.sub(r'<th scope="row"><a [^>]*>([^<]+)</a></th>', r'<th scope="row">\1</th>', page)
             page = re.sub(r'<a [^>]*>(\d+)</a>', r'\1', page)
             self.assertIn(
                 '<tr data-coverage-kind="movies"><th scope="row">Películas</th>'
@@ -126,8 +147,8 @@ class AdministrationTests(unittest.TestCase):
         store.set_movie_watched("10", True)
         page = self.client.get("/admin").get_data(as_text=True)
         for kind in ("movies", "series"):
-            row = re.search(rf'<tr data-coverage-kind="{kind}">(.*?)</tr>', page).group(1)
-            link = unescape(re.search(r'<a href="([^"]+)"', row).group(1))
+            row = re.search(rf'<tr data-coverage-kind="{kind}">(.*?)</tr>', page, re.S).group(1)
+            link = unescape(re.search(r'<td><a href="([^"]+)"', row).group(1))
             params = parse_qs(urlsplit(link).query)
             self.assertEqual(params["tmdb_status"], ["candidates"])
             self.assertEqual(params["children"], ["all"])
