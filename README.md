@@ -170,6 +170,8 @@ La primera visita consulta la primera página de recomendaciones de TMDB y guard
 sus identificadores durante siete días en SQLite, incluso si la lista está vacía.
 El cruce local se recalcula en cada visita para respetar nuevas asociaciones y
 bloqueos, sin otra petición externa mientras la caché siga vigente.
+Las asociaciones bloqueadas se obtienen una sola vez por consulta, evitando
+volver a recorrer los metadatos por cada recomendación candidata.
 La carga es independiente de la ficha; los errores se muestran con una opción
 de reintento y no se guardan como una respuesta vacía.
 

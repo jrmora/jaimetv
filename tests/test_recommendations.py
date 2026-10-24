@@ -1,6 +1,8 @@
+import json
 import tempfile
 import time
 import unittest
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -56,6 +58,24 @@ class RecommendationTests(unittest.TestCase):
         self.assertEqual(items[0]["id"], "2")
         self.factory.assert_called_once()
         self.assertEqual(len(items), 6)
+
+    def test_blocked_metadata_is_not_revalidated_for_every_candidate(self):
+        self.store.set_movie_banned("2", True)
+        original_connect = self.store.connect
+        calls = []
+
+        @contextmanager
+        def counted_connect():
+            with original_connect() as db:
+                def identity(raw):
+                    calls.append(raw)
+                    return fingerprint(json.loads(raw))
+                db.create_function("TITLE_FINGERPRINT", 1, identity)
+                yield db
+
+        with patch.object(self.store, "connect", counted_connect):
+            self.store.recommended_titles("movies", 1, list(range(1, 10)))
+        self.assertLessEqual(len(calls), 20)
 
     def test_expiration_empty_cache_and_failure(self):
         self.store.save_recommendations("movies", 1, [2], time.time() - 8 * 86400)

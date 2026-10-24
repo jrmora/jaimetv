@@ -397,14 +397,14 @@ class CatalogStore:
 
     def recommended_titles(self, kind, tmdb_id, ids):
         table, _, key = KINDS[kind]
-        banned = """AND NOT EXISTS (
-            SELECT 1 FROM banned_movies b
+        banned = """AND json_extract(m.payload, '$.id') NOT IN (
+            SELECT json_extract(blocked.payload, '$.id') FROM banned_movies b
             JOIN tmdb_metadata blocked ON blocked.record_id=b.record_id
                 AND blocked.kind='movies' AND blocked.country='CA'
             JOIN movies original ON original.stream_id=b.record_id
             WHERE blocked.fingerprint=TITLE_FINGERPRINT(original.raw_json)
                 AND json_extract(blocked.payload, '$.status')='matched'
-                AND json_extract(blocked.payload, '$.id')=json_extract(m.payload, '$.id')
+                AND json_type(blocked.payload, '$.id')='integer'
         )""" if kind == "movies" else ""
         with self.connect() as db:
             rows = db.execute(f"""
