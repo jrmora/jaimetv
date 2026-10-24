@@ -55,14 +55,18 @@ class BannedMoviesTests(unittest.TestCase):
         self.assertEqual(reopened.query("movies", banned="only")["total"], 0)
 
     def test_initial_async_people_and_detail_controls(self):
-        for path in ("/movies", "/kids/movies", "/movies?foreign=1", "/people?name=An+Actor"):
+        raw = self.store.detail("movies", "10")["data"]
+        self.store.save_tmdb("movies", "10", "CA", fingerprint(raw), {
+            "status": "matched", "cast": [{"name": "An Actor"}],
+        })
+        for path in ("/movies", "/people?name=An+Actor"):
             html = self.client.get(path).get_data(as_text=True)
-            self.assertNotIn('class="banned-form', html)
-            self.assertNotIn("No me interesa", html)
+            self.assertIn('class="banned-form', html)
+            self.assertIn("No me interesa", html)
             self.assertNotIn('id="banned-filter"', html)
             self.assertNotIn("Películas bloqueadas", html)
         payload = self.client.get("/api/catalog/movies?view=cards").json
-        self.assertNotIn('class="banned-form', payload["html"])
+        self.assertIn('class="banned-form', payload["html"])
         html = self.client.get("/catalog/movies/detail?id=10").get_data(as_text=True)
         self.assertIn("No me interesa", html)
         self.assertIn('class="banned-form', html)
@@ -75,15 +79,15 @@ class BannedMoviesTests(unittest.TestCase):
         html = self.client.get("/movies?banned=only").get_data(as_text=True)
         self.assertNotIn('id="banned-filter"', html)
         self.assertIn('type="hidden" name="banned" value="only"', html)
-        self.assertNotIn('class="banned-form', html)
-        self.assertNotIn("Desbloquear", html)
+        self.assertIn('class="banned-form', html)
+        self.assertIn("Desbloquear", html)
         html = self.client.get("/catalog/movies/detail?id=10&banned=only").get_data(as_text=True)
         self.assertIn("Desbloquear", html)
         self.assertIn(f'name="csrf" value="{self.csrf}"', html)
         payload = self.client.get("/api/catalog/movies?view=cards&banned=only").json
         self.assertEqual(payload["total"], 1)
         self.assertTrue(payload["items"][0]["banned"])
-        self.assertNotIn('class="banned-form', payload["html"])
+        self.assertIn('class="banned-form', payload["html"])
         self.assertIn("banned=only", payload["html"])
         self.assertEqual(self.client.get("/api/catalog/movies?q=Batman").json["total"], 0)
         for path in ("/series", "/catalog/series/detail?id=20"):

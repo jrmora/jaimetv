@@ -1,4 +1,4 @@
-{% from "watched.html" import watched_button %}
+{% from "watched.html" import watched_button, banned_button, watchlist_button %}
 {% macro cards(result, kind, filters) %}
 <div class="catalog-grid">
   {% for item in result['items'] %}
@@ -20,9 +20,13 @@
       {% if item.rating is not none %}
       <p class="small text-muted mb-1">{{ item.votes }} votos{% if item.votes < 100 %} · Pocos votos{% endif %}</p>
       {% endif %}
+      <div class="d-flex flex-wrap gap-2">
       {% if kind == 'movies' %}
-      {{ watched_button(item.id, item.watched, sync_csrf, filters) }}
+      {{ watched_button(item.id, item.watched, sync_csrf, filters, icon_only=true) }}
+      {{ banned_button(item.id, item.banned, sync_csrf, filters, icon_only=true) }}
       {% endif %}
+      {{ watchlist_button(kind, item.id, item.watchlisted, sync_csrf) }}
+      </div>
       {% if filters.get('my_services') == 1 and item.service_icons %}
       <div class="card-services d-flex flex-wrap gap-2 mt-2" aria-label="Disponible en mis servicios">
         {% for service in item.service_icons %}

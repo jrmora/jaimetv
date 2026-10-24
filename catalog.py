@@ -199,6 +199,15 @@ class CatalogStore:
                 )
             """)
             db.execute("""
+                CREATE TABLE IF NOT EXISTS tmdb_recommendations (
+                    kind TEXT NOT NULL,
+                    tmdb_id INTEGER NOT NULL,
+                    checked_at REAL NOT NULL,
+                    ids TEXT NOT NULL,
+                    PRIMARY KEY (kind, tmdb_id)
+                )
+            """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS sync_excluded_categories (
                     category_table TEXT NOT NULL,
                     category_id TEXT NOT NULL,
@@ -225,6 +234,29 @@ class CatalogStore:
                     banned_at TEXT NOT NULL
                 )
             """)
+
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS watchlist (
+                    kind TEXT NOT NULL,
+                    record_id TEXT NOT NULL,
+                    saved_at TEXT NOT NULL,
+                    PRIMARY KEY (kind, record_id)
+                )
+            """)
+
+    def set_watchlisted(self, kind, record_id, enabled):
+        if kind not in KINDS or not isinstance(enabled, bool):
+            raise ValueError("Estado de lista inválido.")
+        table, _, key = KINDS[kind]
+        with self.connect() as db:
+            if db.execute(f"SELECT 1 FROM {table} WHERE {key}=?", (record_id,)).fetchone() is None:
+                return False
+            if enabled:
+                db.execute("INSERT OR IGNORE INTO watchlist VALUES (?, ?, ?)",
+                           (kind, record_id, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+            else:
+                db.execute("DELETE FROM watchlist WHERE kind=? AND record_id=?", (kind, record_id))
+        return True
 
     def set_movie_watched(self, record_id, watched):
         if not isinstance(watched, bool):
@@ -344,6 +376,63 @@ class CatalogStore:
                 "INSERT OR REPLACE INTO tmdb_metadata VALUES (?, ?, ?, ?, ?)",
                 (kind, record_id, country, fingerprint, json.dumps(payload, ensure_ascii=False)),
             )
+
+    def cached_recommendations(self, kind, tmdb_id, since):
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT ids FROM tmdb_recommendations WHERE kind=? AND tmdb_id=? AND checked_at>=?",
+                (kind, tmdb_id, since),
+            ).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_recommendations(self, kind, tmdb_id, ids, checked_at):
+        with self.connect() as db:
+            db.execute(
+                "INSERT OR REPLACE INTO tmdb_recommendations VALUES (?, ?, ?, ?)",
+                (kind, tmdb_id, checked_at, json.dumps(ids)),
+            )
+
+    def recommended_titles(self, kind, tmdb_id, ids):
+        table, _, key = KINDS[kind]
+        banned = """AND NOT EXISTS (
+            SELECT 1 FROM banned_movies b
+            JOIN tmdb_metadata blocked ON blocked.record_id=b.record_id
+                AND blocked.kind='movies' AND blocked.country='CA'
+            JOIN movies original ON original.stream_id=b.record_id
+            WHERE blocked.fingerprint=TITLE_FINGERPRINT(original.raw_json)
+                AND json_extract(blocked.payload, '$.status')='matched'
+                AND json_extract(blocked.payload, '$.id')=json_extract(m.payload, '$.id')
+        )""" if kind == "movies" else ""
+        with self.connect() as db:
+            rows = db.execute(f"""
+                SELECT s.{key} AS id, s.name, s.raw_json, m.payload,
+                    EXISTS (SELECT 1 FROM watchlist saved WHERE saved.kind=m.kind
+                        AND saved.record_id=s.{key}) AS watchlisted,
+                    json_extract(m.payload, '$.id') AS tmdb_id
+                FROM {table} s JOIN tmdb_metadata m ON m.record_id=s.{key}
+                    AND m.kind=? AND m.country='CA'
+                    AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
+                JOIN json_each(?) recommended
+                    ON recommended.value=json_extract(m.payload, '$.id')
+                WHERE json_extract(m.payload, '$.status')='matched'
+                    AND json_extract(m.payload, '$.id')!=? {banned}
+                ORDER BY CAST(recommended.key AS INTEGER), CASEFOLD(s.name), s.{key}
+            """, (kind, json.dumps(ids), tmdb_id)).fetchall()
+        items, seen = [], set()
+        for row in rows:
+            if row["tmdb_id"] in seen:
+                continue
+            seen.add(row["tmdb_id"])
+            raw, metadata = json.loads(row["raw_json"]), json.loads(row["payload"])
+            items.append({
+                "id": row["id"], "name": row["name"],
+                "watchlisted": bool(row["watchlisted"]),
+                "poster_url": valid_image(raw.get("stream_icon")) or valid_image(raw.get("cover")),
+                "year": release_year(metadata.get("release_date")),
+            })
+            if len(items) == 6:
+                break
+        return items
 
     @contextmanager
     def connect(self):
@@ -526,7 +615,7 @@ class CatalogStore:
                 names.setdefault(name.casefold(), name)
         return sorted(names.values(), key=str.casefold)
 
-    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", tmdb_status="all", era=None):
+    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", tmdb_status="all", era=None, watchlist=False):
         table, categories, key = KINDS[kind]
         if page is not None and (isinstance(page, bool) or not isinstance(page, int) or page < 1):
             raise ValueError("Página inválida.")
@@ -569,6 +658,9 @@ class CatalogStore:
             if sort_by == "rating" else ""
         )
         conditions, params = [], []
+        watchlist_expression = f"EXISTS (SELECT 1 FROM watchlist saved WHERE saved.kind='{kind}' AND saved.record_id=s.{key})"
+        if watchlist:
+            conditions.append(watchlist_expression)
         if eras:
             era_conditions = {
                 "recent": f"{year} >= 2015",
@@ -714,7 +806,7 @@ class CatalogStore:
                 query_params.extend((50, (page - 1) * 50))
             rows = db.execute(
                 f"""SELECT s.{key} AS id, s.name, s.category_id, {tmdb_rating} AS rating,
-                           {votes} AS votes, {year} AS year,
+                           {votes} AS votes, {year} AS year, {watchlist_expression} AS watchlisted,
                            {genre_expression} AS genre, COALESCE(c.category_name, 'Sin categoría') AS category_name,
                            json_extract(s.raw_json, '$.youtube_trailer') AS youtube_trailer,
                            json_extract(s.raw_json, '$.stream_icon') AS preview_icon,
@@ -730,6 +822,7 @@ class CatalogStore:
         items = []
         for row in rows:
             item = dict(row)
+            item["watchlisted"] = bool(item["watchlisted"])
             if kind == "movies":
                 item["watched"] = bool(item["watched"])
                 item["banned"] = bool(item["banned"])
@@ -760,9 +853,12 @@ class CatalogStore:
             banned = kind == "movies" and db.execute(
                 "SELECT 1 FROM banned_movies WHERE record_id=?", (record_id,),
             ).fetchone() is not None
+            watchlisted = db.execute(
+                "SELECT 1 FROM watchlist WHERE kind=? AND record_id=?", (kind, record_id),
+            ).fetchone() is not None
         if row is None:
             return None
-        result = {"name": row["name"], "data": json.loads(row["raw_json"])}
+        result = {"name": row["name"], "data": json.loads(row["raw_json"]), "watchlisted": watchlisted}
         if kind == "movies":
             result["watched"] = watched
             result["banned"] = banned

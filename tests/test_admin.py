@@ -89,6 +89,22 @@ class AdministrationTests(unittest.TestCase):
         self.assertEqual(page.count("Sin registro de actualizaci"), 4)
         self.assertEqual(page.count('aria-valuenow="0"'), 2)
 
+    def test_blocked_movies_access_is_in_administration(self):
+        store = self.app.config["CATALOG_STORE"]
+        store.replace(snapshot())
+        store.set_movie_banned("10", True)
+        page = self.client.get("/admin").get_data(as_text=True)
+        link = re.search(r'<a [^>]*href="([^"]+)"[^>]*>Ver películas bloqueadas</a>', page)
+        self.assertIsNotNone(link)
+        url = unescape(link.group(1))
+        self.assertEqual(parse_qs(urlsplit(url).query), {
+            "banned": ["only"], "children": ["all"], "watched": ["all"],
+        })
+        html = self.client.get(url).get_data(as_text=True)
+        self.assertIn("Películas bloqueadas", html)
+        self.assertIn('aria-label="Desbloquear"', html)
+        self.assertNotIn('id="banned-filter"', html)
+
     def test_coverage_percentage_counts_all_consulted_statuses(self):
         store = self.app.config["CATALOG_STORE"]
         store.replace(snapshot())

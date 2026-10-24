@@ -37,7 +37,9 @@ async function fixture(image = null, replacements = []) {
   let nextImage = image;
   let failure = false;
   runInNewContext(script, {
+    Event,
     document: {
+      dispatchEvent() {},
       querySelector(selector) { return selector === "#tmdb-section" ? section : null; },
       querySelectorAll(selector) { return selector === "[data-original-backdrop]" ? originals : fields; },
     },

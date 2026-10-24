@@ -1,16 +1,34 @@
-{% macro watched_button(record_id, watched, csrf, filters) %}
+{% macro watched_button(record_id, watched, csrf, filters, icon_only=false) %}
 <form class="watched-form mt-2" method="post" action="{{ url_for('movie_watched', record_id=record_id, **filters) }}">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <input type="hidden" name="watched" value="{{ '0' if watched else '1' }}">
-  <button type="submit" class="btn btn-sm {{ 'btn-success' if watched else 'btn-outline-secondary' }}" aria-pressed="{{ 'true' if watched else 'false' }}" title="{{ 'Marcar como no vista' if watched else 'Marcar como vista' }}">{{ 'Vista' if watched else 'Ya la vi' }}</button>
+  <button type="submit" class="btn btn-sm {{ 'icon-button' if icon_only else '' }} {{ 'btn-success' if watched else 'btn-outline-secondary' }}" {% if icon_only %}data-icon-only="true"{% endif %} aria-label="{{ 'Vista' if watched else 'Ya la vi' }}" aria-pressed="{{ 'true' if watched else 'false' }}" title="{{ 'Marcar como no vista' if watched else 'Marcar como vista' }}">
+    {% if icon_only %}
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/></svg>
+    {% else %}{{ 'Vista' if watched else 'Ya la vi' }}{% endif %}
+  </button>
   <p class="watched-error small text-danger mb-0 mt-1" role="alert" hidden></p>
 </form>
 {% endmacro %}
-{% macro banned_button(record_id, banned, csrf, filters) %}
+{% macro watchlist_button(kind, record_id, saved, csrf) %}
+<form class="watchlist-form mt-2" method="post" action="{{ url_for('title_watchlist', kind=kind, record_id=record_id) }}">
+  <input type="hidden" name="csrf" value="{{ csrf }}">
+  <input type="hidden" name="watchlist" value="{{ '0' if saved else '1' }}">
+  <button type="submit" class="btn btn-sm icon-button {{ 'btn-primary' if saved else 'btn-outline-secondary' }}" data-icon-only="true" aria-label="{{ 'Quitar de Mi lista' if saved else 'Quiero ver' }}" title="{{ 'Quitar de Mi lista' if saved else 'Quiero ver' }}" aria-pressed="{{ 'true' if saved else 'false' }}">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="{{ 'currentColor' if saved else 'none' }}" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="M6 3h12v18l-6-4-6 4Z"/></svg>
+  </button>
+  <p class="watched-error small text-danger mb-0 mt-1" role="alert" hidden></p>
+</form>
+{% endmacro %}
+{% macro banned_button(record_id, banned, csrf, filters, icon_only=false) %}
 <form class="banned-form mt-2" method="post" action="{{ url_for('movie_banned', record_id=record_id, **filters) }}">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <input type="hidden" name="banned" value="{{ '0' if banned else '1' }}">
-  <button type="submit" class="btn btn-sm {{ 'btn-danger' if banned else 'btn-outline-secondary' }}" aria-pressed="{{ 'true' if banned else 'false' }}" title="{{ 'Volver a mostrar esta película' if banned else 'Ocultar esta película del catálogo' }}">{{ 'Desbloquear' if banned else 'No me interesa' }}</button>
+  <button type="submit" class="btn btn-sm {{ 'icon-button' if icon_only else '' }} {{ 'btn-danger' if banned else 'btn-outline-secondary' }}" {% if icon_only %}data-icon-only="true"{% endif %} aria-label="{{ 'Desbloquear' if banned else 'No me interesa' }}" aria-pressed="{{ 'true' if banned else 'false' }}" title="{{ 'Volver a mostrar esta película' if banned else 'Ocultar esta película del catálogo' }}">
+    {% if icon_only %}
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg>
+    {% else %}{{ 'Desbloquear' if banned else 'No me interesa' }}{% endif %}
+  </button>
   <p class="watched-error small text-danger mb-0 mt-1" role="alert" hidden></p>
 </form>
 {% endmacro %}

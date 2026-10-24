@@ -74,6 +74,7 @@
       }
       updateBackdrop();
       updateOriginalFields();
+      document.dispatchEvent(new Event("tmdb-updated"));
     } catch (error) {
       errorBox.textContent = `No se pudo consultar TMDB. ${error.message}`;
       errorBox.hidden = false;

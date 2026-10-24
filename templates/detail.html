@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "trailer.html" import trailer_link %}
-{% from "watched.html" import watched_button, banned_button %}
+{% from "watched.html" import watched_button, banned_button, watchlist_button %}
 {% block title %}{{ record.name }} · JaimeTV{% endblock %}
 {% block main_class %}detail-page{% endblock %}
 {% block back_navigation %}{% endblock %}
@@ -40,12 +40,13 @@
     {% if kind in ['movies', 'series'] %}
     <div id="detail-score" aria-live="polite" hidden></div>
     {% endif %}
-    {% if kind == 'movies' %}
     <div class="detail-actions d-flex flex-wrap gap-2">
+      {% if kind == 'movies' %}
       {{ watched_button(request.args.get('id'), record.watched, sync_csrf, filters) }}
       {{ banned_button(request.args.get('id'), record.banned, sync_csrf, filters) }}
+      {% endif %}
+      {{ watchlist_button(kind, request.args.get('id'), record.watchlisted, sync_csrf) }}
     </div>
-    {% endif %}
     {% if kind in ['movies', 'series'] %}
     <div id="tmdb-section" class="border rounded p-3 my-4" role="region"
              aria-label="Información de TMDB"
@@ -74,8 +75,16 @@
     {% endfor %}
   </section>
 </div>
+<section id="recommendations" class="mt-4" aria-label="También te podrían gustar"
+         data-endpoint="{{ url_for('tmdb_recommendations', kind=kind, record_id=request.args.get('id')) }}" hidden>
+  <h2 class="h4">También te podrían gustar</h2>
+  <div id="recommendations-content"></div>
+  <p id="recommendations-error" class="alert alert-warning" role="alert" hidden></p>
+  <button id="recommendations-retry" type="button" class="btn btn-outline-secondary" hidden>Reintentar recomendaciones</button>
+</section>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='detail.js') }}" defer></script>
 <script src="{{ url_for('static', filename='tmdb.js') }}" defer></script>
+<script src="{{ url_for('static', filename='recommendations.js') }}" defer></script>
 {% endblock %}

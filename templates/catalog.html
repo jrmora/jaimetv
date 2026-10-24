@@ -3,6 +3,17 @@
 {% block page_heading %}{{ title }}{% endblock %}
 {% block main_class %}catalog-page{% endblock %}
 {% block content %}
+{% if filters.get('banned') == 'only' %}
+<h2 class="h5">Películas bloqueadas</h2>
+{% endif %}
+{% if filters.get('watchlist') %}
+<h2 class="h5">Mi lista</h2>
+<div class="d-flex gap-3 mb-3">
+  {% for list_kind, label in labels.items() %}
+  <a href="{{ url_for('listing', kind=list_kind, watchlist=1, children='all', watched='all') }}" {% if kind == list_kind %}aria-current="page"{% endif %}>{{ label }}</a>
+  {% endfor %}
+</div>
+{% endif %}
 <div class="catalog-search mx-auto mb-3">
   <label for="q" class="visually-hidden">Buscar títulos, actores o directores</label>
   <div class="input-group input-group-lg">
@@ -31,6 +42,7 @@
   <input type="hidden" name="foreign" value="{{ filters.foreign }}">
   <input type="hidden" name="page" value="{{ filters.page }}">
   <input type="hidden" name="view" value="cards">
+  {% if filters.get('watchlist') %}<input type="hidden" name="watchlist" value="1">{% endif %}
   {% if kind == 'movies' %}
   {% if filters.get('banned') == 'only' %}
   <input type="hidden" name="banned" value="only">
@@ -105,7 +117,7 @@
   {% endif %}
   <div class="d-flex flex-wrap gap-2">
     <button class="btn btn-primary" type="submit">Buscar</button>
-    <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view) }}">Limpiar</a>
+    <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view, **({'watchlist': 1} if filters.get('watchlist') else {})) }}">Limpiar</a>
   </div>
 </form>
 {% if kind in ['movies', 'series'] %}

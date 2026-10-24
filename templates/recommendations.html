@@ -1,0 +1,25 @@
+{% from "watched.html" import banned_button, watchlist_button %}
+{% if items %}
+<div class="catalog-grid">
+  {% for item in items %}
+  <article class="catalog-card border rounded bg-body overflow-hidden">
+    <a class="poster-link" href="{{ url_for('detail', kind=kind, id=item.id) }}" aria-label="Ver ficha de {{ item.name }}">
+      {% if item.poster_url %}
+      <img class="catalog-poster" src="{{ item.poster_url }}" alt="Portada de {{ item.name }}" loading="lazy" referrerpolicy="no-referrer">
+      <span class="poster-placeholder" hidden>No se pudo cargar la portada.</span>
+      {% else %}
+      <span class="poster-placeholder">Sin portada</span>
+      {% endif %}
+    </a>
+    <div class="p-3">
+      <h3 class="h6 mb-1"><a class="text-body text-decoration-none" href="{{ url_for('detail', kind=kind, id=item.id) }}">{{ item.name }}</a></h3>
+      {% if item.year %}<p class="small text-muted mb-0">{{ item.year }}</p>{% endif %}
+      <div class="d-flex flex-wrap gap-2">
+      {% if kind == 'movies' %}{{ banned_button(item.id, false, sync_csrf, {}, icon_only=true) }}{% endif %}
+      {{ watchlist_button(kind, item.id, item.watchlisted, sync_csrf) }}
+      </div>
+    </div>
+  </article>
+  {% endfor %}
+</div>
+{% endif %}

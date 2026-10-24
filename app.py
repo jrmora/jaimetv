@@ -14,7 +14,7 @@ from flask import Flask, abort, g, jsonify, redirect, render_template, request, 
 
 from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image
 from xtream import CatalogError, XtreamClient
-from tmdb import TMDBClient, TMDBError, TMDBRateLimitError, enrich, fingerprint
+from tmdb import TMDBClient, TMDBError, TMDBRateLimitError, enrich, fingerprint, recommended_titles
 from provider_logos import provider_icons
 from tmdb_jobs import TMDBBatch
 from platforms import ordered_platforms
@@ -269,7 +269,25 @@ def create_app(db_path=None):
             values["tmdb_status"] = tmdb_status
         if eras:
             values["era"] = eras
+        if "watchlist" in request.args:
+            if request.args["watchlist"] not in {"0", "1"}:
+                abort(400, description="Filtro de lista inválido.")
+            values["watchlist"] = int(request.args["watchlist"])
         return values
+
+    @app.post("/catalog/<kind>/<record_id>/watchlist")
+    def title_watchlist(kind, record_id):
+        check_sync_csrf()
+        value = request.form.get("watchlist")
+        if kind not in KINDS:
+            abort(404)
+        if value not in {"0", "1"}:
+            abort(400, description="Estado de lista inválido.")
+        if not store.set_watchlisted(kind, record_id, value == "1"):
+            abort(404, description="El título no existe en el catálogo local.")
+        if request.accept_mimetypes.best == "application/json":
+            return jsonify(id=record_id, watchlist=value == "1")
+        return redirect(url_for("detail", kind=kind, id=record_id), code=303)
 
     @app.post("/catalog/movies/<record_id>/banned")
     def movie_banned(record_id):
@@ -542,6 +560,24 @@ def create_app(db_path=None):
         return jsonify(content_labels=render_template("content_labels.html", tmdb=data), html=render_template(
             "tmdb.html", tmdb=data, provider_icons=provider_icons(data.get("providers", {})),
         ))
+
+    @app.get("/api/tmdb/<kind>/<record_id>/recommendations")
+    def tmdb_recommendations(kind, record_id):
+        if kind not in KINDS or store.detail(kind, record_id) is None:
+            abort(404, description="La ficha no existe.")
+        try:
+            items = recommended_titles(
+                store, kind, record_id,
+                client_factory=app.config.get("TMDB_CLIENT_FACTORY", TMDBClient),
+            )
+        except TMDBError as exc:
+            app.logger.warning("No se pudieron consultar recomendaciones TMDB: %s", exc)
+            response = jsonify(error=str(exc))
+            if isinstance(exc, TMDBRateLimitError):
+                response.headers["Retry-After"] = str(exc.retry_after)
+                return response, 429
+            return response, 502
+        return jsonify(html=render_template("recommendations.html", items=items, kind=kind))
 
     @app.get("/api/catalog/<kind>")
     def catalog_api(kind):

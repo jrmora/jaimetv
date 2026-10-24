@@ -80,6 +80,24 @@ class TMDBRequestGate:
 REQUEST_GATE = TMDBRequestGate()
 
 
+def recommended_titles(store, kind, record_id, client_factory=None):
+    record = store.detail(kind, record_id)
+    if record is None:
+        raise TMDBError("El título ya no está en el catálogo.")
+    metadata = store.tmdb_cached(kind, record_id, COUNTRY, fingerprint(record["data"]))
+    if not metadata or metadata.get("status") != "matched":
+        return []
+    tmdb_id = metadata.get("id")
+    if type(tmdb_id) is not int or tmdb_id <= 0:
+        raise TMDBError("La asociación TMDB no tiene un identificador válido.")
+    now = time.time()
+    ids = store.cached_recommendations(kind, tmdb_id, now - 7 * 86400)
+    if ids is None:
+        ids = (client_factory or TMDBClient)().recommendations(kind, tmdb_id)
+        store.save_recommendations(kind, tmdb_id, ids, now)
+    return store.recommended_titles(kind, tmdb_id, ids)
+
+
 def normalized(value):
     return "".join(
         c for c in unicodedata.normalize("NFKD", value.casefold())
@@ -198,6 +216,17 @@ class TMDBClient:
         if not isinstance(data, dict):
             raise TMDBError("TMDB devolvió un formato inesperado.")
         return data
+
+    def recommendations(self, kind, tmdb_id):
+        media = "movie" if kind == "movies" else "tv"
+        data = self.get(f"{media}/{tmdb_id}/recommendations", {"language": "es-ES", "page": 1})
+        results = data.get("results")
+        if not isinstance(results, list) or any(
+            not isinstance(item, dict) or type(item.get("id")) is not int or item["id"] <= 0
+            for item in results
+        ):
+            raise TMDBError("TMDB devolvió recomendaciones con un formato inesperado.")
+        return list(dict.fromkeys(item["id"] for item in results if not item.get("adult")))
 
     def search(self, kind, data):
         media = "movie" if kind == "movies" else "tv"

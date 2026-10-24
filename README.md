@@ -146,6 +146,31 @@ ocupa todo el ancho, sin mantener una columna vacía debajo de la portada.
 La disponibilidad en Canadá solo muestra modalidades con plataformas conocidas,
 en grupos compactos con iconos. Si no hay ninguna, muestra un único aviso.
 
+Al final de la ficha aparece «También te podrían gustar», con hasta seis
+recomendaciones de TMDB que existen en el catálogo local del mismo tipo.
+Se conserva el orden recomendado por TMDB, sin duplicar versiones del mismo
+título ni mostrar la obra actual o películas marcadas «No me interesa».
+El cruce usa asociaciones TMDB confirmadas y vigentes; mejora conforme se
+enriquece el catálogo. Si no hay coincidencias locales, no se muestra la sección.
+La primera visita consulta la primera página de recomendaciones de TMDB y guarda
+sus identificadores durante siete días en SQLite, incluso si la lista está vacía.
+El cruce local se recalcula en cada visita para respetar nuevas asociaciones y
+bloqueos, sin otra petición externa mientras la caché siga vigente.
+La carga es independiente de la ficha; los errores se muestran con una opción
+de reintento y no se guardan como una respuesta vacía.
+
+El icono de marcador «Quiero ver» guarda películas y series en **Mi lista**,
+accesible desde la navegación con pestañas para ambos catálogos. Está disponible
+en tarjetas, fichas y recomendaciones. Al guardarlo se rellena el marcador;
+otro toque lo quita. No cambia los estados de vista o «No me interesa».
+La lista se guarda localmente en SQLite y se conserva durante las
+sincronizaciones. La búsqueda y los filtros también funcionan dentro de la
+lista; los títulos bloqueados siguen ocultos. No requiere llamadas a TMDB.
+
+En Administración, «Ver películas bloqueadas» abre el catálogo de películas
+marcadas «No me interesa», con controles para desbloquearlas. No se añade un
+selector de bloqueadas al panel de filtros.
+
 El buscador principal aparece sobre los filtros, siempre accesible aunque estén
 plegados. Un único texto busca por título del proveedor, título traducido u
 original TMDB, reparto, dirección y creadores (coincidencia en cualquiera).

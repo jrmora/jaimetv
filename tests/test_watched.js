@@ -8,7 +8,7 @@ const { runInNewContext } = require("node:vm");
 
 const script = readFileSync(join(__dirname, "../static/watched.js"), "utf8");
 
-function setup(response, banned = false, confirmed = true) {
+function setup(response, banned = false, confirmed = true, watchlist = false) {
   let submit;
   const events = [];
   const classes = new Set(["btn-outline-secondary"]);
@@ -22,8 +22,8 @@ function setup(response, banned = false, confirmed = true) {
   const errorBox = { hidden: true, textContent: "" };
   const form = {
     action: `/catalog/movies/10/${banned ? "banned" : "watched"}`,
-    elements: { watched: { value: "1" }, banned: { value: "1" } },
-    matches: selector => selector === (banned ? ".banned-form" : ".watched-form"),
+    elements: { watched: { value: "1" }, banned: { value: "1" }, watchlist: { value: "1" } },
+    matches: selector => selector === (watchlist ? ".watchlist-form" : banned ? ".banned-form" : ".watched-form"),
     querySelector: selector => selector === "button" ? button : errorBox,
   };
   runInNewContext(script, {
@@ -41,6 +41,40 @@ function setup(response, banned = false, confirmed = true) {
   return { form, button, errorBox, events, classes, attributes, confirmations,
     submit: () => submit({ target: form, preventDefault() {} }) };
 }
+
+test("watchlist icon toggles saved state without changing watched or banned", async () => {
+  let saved = true;
+  const state = setup(async () => ({ ok: true, json: async () => ({ watchlist: saved }) }), false, true, true);
+  state.button.dataset = { iconOnly: "true" };
+  state.button.textContent = "bookmark";
+  const icon = {};
+  state.button.querySelector = () => ({ setAttribute(name, value) { icon[name] = value; } });
+  await state.submit();
+  assert.equal(state.form.elements.watchlist.value, "0");
+  assert.equal(state.attributes["aria-label"], "Quitar de Mi lista");
+  assert.equal(state.classes.has("btn-primary"), true);
+  assert.equal(icon.fill, "currentColor");
+  saved = false;
+  await state.submit();
+  assert.equal(state.form.elements.watchlist.value, "1");
+  assert.equal(state.attributes["aria-label"], "Quiero ver");
+  assert.equal(icon.fill, "none");
+  assert.equal(state.button.textContent, "bookmark");
+  assert.equal(state.form.elements.watched.value, "1");
+  assert.equal(state.form.elements.banned.value, "1");
+});
+
+test("icon buttons preserve their content and update accessible state", async () => {
+  for (const banned of [false, true]) {
+    const state = setup(async () => ({ ok: true, json: async () => ({ watched: true, banned: true }) }), banned);
+    state.button.dataset = { iconOnly: "true" };
+    state.button.textContent = "icon";
+    await state.submit();
+    assert.equal(state.button.textContent, "icon");
+    assert.equal(state.attributes["aria-label"], banned ? "Desbloquear" : "Vista");
+    assert.equal(state.attributes["aria-pressed"], "true");
+  }
+});
 
 test("mark and unmark updates the button and notifies the live catalog", async () => {
   let watched = true;
