@@ -19,14 +19,30 @@
   'tv_archive': 'Archivo de TV disponible', 'tv_archive_duration': 'Días de archivo de TV',
   'is_adult': 'Contenido para adultos', 'seasons': 'Temporadas'
 } %}
-<div class="detail-layout row g-4 align-items-start">
+<div class="detail-layout{% if record.get('version_count', 1) > 1 %} has-versions{% endif %} row g-4 align-items-start">
   <aside class="col-12 col-md-4 col-lg-3" aria-label="Imágenes del registro">
+    {% if record.get('version_count', 1) > 1 %}
+    <h2 class="h6">{{ record.version_count }} versiones disponibles</h2>
+    <div class="version-posters">
+      {% for version in record.versions %}
+      <figure class="mb-0">
+        {% if version.poster_url %}
+        <img src="{{ version.poster_url }}" alt="Portada de {{ version.name }}" class="detail-poster rounded border bg-body-tertiary"
+             data-error-id="version-error-{{ loop.index }}" loading="lazy" referrerpolicy="no-referrer">
+        <p id="version-error-{{ loop.index }}" class="small text-muted" role="status" hidden>No se pudo cargar la portada.</p>
+        {% else %}<p class="small text-muted">Sin portada</p>{% endif %}
+        <figcaption class="small text-break mt-1">{{ version.name }}</figcaption>
+      </figure>
+      {% endfor %}
+    </div>
+    {% else %}
     {% if image_url %}
     <img id="detail-poster" src="{{ image_url }}" alt="Portada de {{ record.name }}"
          data-error-id="poster-error" class="detail-poster rounded border bg-body-tertiary" referrerpolicy="no-referrer">
     <p id="poster-error" class="alert alert-secondary mt-2" role="status" hidden>No se pudo cargar la imagen.</p>
     {% else %}
     <p class="alert alert-secondary">Este registro no tiene una imagen HTTP(S) válida.</p>
+    {% endif %}
     {% endif %}
   </aside>
   <section class="col-12 col-md-8 col-lg-9" aria-label="Detalles del registro">
@@ -56,6 +72,19 @@
       <div id="tmdb-content" aria-live="polite"><p>Consultando TMDB…</p></div>
       <p id="tmdb-error" class="alert alert-warning" role="alert" hidden></p>
       <button id="tmdb-refresh" class="btn btn-outline-secondary" type="button">Actualizar TMDB</button>
+      <details class="mt-3">
+        <summary>Enlazar otra ficha de TMDB</summary>
+        <form id="tmdb-manual" class="mt-2">
+          <fieldset id="tmdb-manual-controls">
+            <label for="tmdb-manual-reference" class="form-label">Enlace o ID de {{ 'película' if kind == 'movies' else 'serie' }} en TMDB</label>
+            <input id="tmdb-manual-reference" name="manual_tmdb" class="form-control" type="text" maxlength="300" required
+                   placeholder="https://www.themoviedb.org/{{ 'movie' if kind == 'movies' else 'tv' }}/12345"
+                   aria-describedby="tmdb-manual-help">
+            <p id="tmdb-manual-help" class="small text-muted">Úsalo si ningún candidato es correcto. Sustituye la asociación TMDB, sin cambiar los datos del proveedor.</p>
+            <button type="submit" class="btn btn-outline-primary">Enlazar ficha</button>
+          </fieldset>
+        </form>
+      </details>
       <noscript><p>Activa JavaScript para consultar la información complementaria.</p></noscript>
       <div class="small text-muted mt-3">
         <h3 class="h6">Créditos y fuentes</h3>

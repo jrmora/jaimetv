@@ -6,11 +6,12 @@ import unittest
 from contextlib import contextmanager
 from html import unescape
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from app import create_app
 from catalog import fingerprint, effective_people
 from test_app import snapshot
+from tmdb import TMDBError
 
 
 class TMDBFilterTests(unittest.TestCase):
@@ -27,7 +28,7 @@ class TMDBFilterTests(unittest.TestCase):
     def cache(self, kind="movies", record_id="10", **changes):
         raw = self.store.detail(kind, record_id)["data"]
         payload = {
-            "status": "matched", "id": 63, "media": "movie" if kind == "movies" else "tv",
+            "status": "matched", "id": int(record_id), "media": "movie" if kind == "movies" else "tv",
             "title": "Batman", "genres": ["Drama", "Crimen"], "release_date": "2024-02-03",
             "cast": [{"name": "Actor TMDB"}], "directors": ["Director TMDB"],
             "rating": 7.5, "votes": 200, **changes,
@@ -46,6 +47,54 @@ class TMDBFilterTests(unittest.TestCase):
         self.assertNotIn('name="category"', page)
         self.assertIn("Géneros de TMDB", page)
         self.assertNotIn("CAST. ANIMACION", page)
+
+    def test_manual_tmdb_link_accepts_id_or_matching_url_and_persists(self):
+        for kind, record_id, media in (("movies", "10", "movie"), ("series", "20", "tv")):
+            self.cache(kind, record_id)
+            original = self.store.detail(kind, record_id)["data"]
+            page = self.client.get(f"/catalog/{kind}/detail?id={record_id}").get_data(as_text=True)
+            self.assertIn('id="tmdb-manual"', page)
+            with self.client.session_transaction() as session:
+                csrf = session["tmdb_csrf"]
+            remote = Mock()
+            remote.details.return_value = {
+                "status": "matched", "id": 999, "media": media,
+                "title": "Correct title", "genres": [], "countries": [], "companies": [],
+            }
+            self.app.config["TMDB_CLIENT_FACTORY"] = Mock(return_value=remote)
+            url = f"/api/tmdb/{kind}/{record_id}"
+            for reference in ("999", f"https://www.themoviedb.org/{media}/999-correct-title?language=es"):
+                response = self.client.post(url, data={"csrf": csrf, "manual_tmdb": reference})
+                self.assertEqual(response.status_code, 200)
+                self.assertIn("Correct title", response.json["html"])
+                remote.details.assert_called_with(kind, 999)
+            remote.search.assert_not_called()
+            self.assertEqual(self.store.detail(kind, record_id)["data"], original)
+            cached = self.client.get(url)
+            self.assertIn("Correct title", cached.json["html"])
+            self.assertEqual(remote.details.call_count, 2)
+
+    def test_manual_tmdb_link_validation_csrf_and_failed_lookup_preserve_cache(self):
+        self.cache()
+        self.client.get("/catalog/movies/detail?id=10")
+        with self.client.session_transaction() as session:
+            csrf = session["tmdb_csrf"]
+        url = "/api/tmdb/movies/10"
+        remote = Mock()
+        self.app.config["TMDB_CLIENT_FACTORY"] = Mock(return_value=remote)
+        for reference in ("", "0", "-1", "1.2", "abc", "999999999999999999999",
+                          "https://www.themoviedb.org/tv/999",
+                          "https://example.com/movie/999", "https://www.themoviedb.org.evil/movie/999"):
+            response = self.client.post(url, data={"csrf": csrf, "manual_tmdb": reference})
+            self.assertEqual(response.status_code, 400, reference)
+        self.assertEqual(self.client.post(url, data={"manual_tmdb": "999"}).status_code, 400)
+        self.assertEqual(self.client.post(url, data={
+            "csrf": csrf, "manual_tmdb": "999", "selected": "63",
+        }).status_code, 400)
+        remote.details.assert_not_called()
+        remote.details.side_effect = TMDBError("No existe la ficha.")
+        self.assertEqual(self.client.post(url, data={"csrf": csrf, "manual_tmdb": "999"}).status_code, 502)
+        self.assertIn("Batman", self.client.get(url).json["html"])
 
     def test_kids_search_does_not_parse_people_for_non_kids_titles(self):
         data = snapshot()

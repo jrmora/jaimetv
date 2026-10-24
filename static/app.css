@@ -131,3 +131,14 @@ td { overflow-wrap: anywhere; }
   .card-pagination .btn { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; min-width: 44px; }
   .card-pagination .pagination-extra { display: none; }
 }
+.version-posters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; }
+.version-posters figure { min-width: 0; }
+.version-posters .detail-poster { width: 100%; max-width: 100%; height: auto; }
+@media (max-width: 1199.98px) {
+  .detail-layout.has-versions { grid-template-columns: minmax(0, 1fr); }
+  .detail-layout.has-versions > aside { grid-column: 1; grid-row: 5; }
+  .detail-layout.has-versions > section > header,
+  .detail-layout.has-versions #content-labels,
+  .detail-layout.has-versions #detail-score,
+  .detail-layout.has-versions .detail-actions { grid-column: 1; }
+}

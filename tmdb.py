@@ -338,13 +338,17 @@ def lgbti_keywords(names):
     return sorted({name for name in names if name.strip().casefold() in terms}, key=str.casefold)
 
 
-def enrich(store, kind, record_id, client_factory=TMDBClient, refresh=False, selected=None):
+def enrich(store, kind, record_id, client_factory=TMDBClient, refresh=False, selected=None, manual_id=None):
     record = store.detail(kind, record_id)
     if record is None:
         raise TMDBError("El registro ya no existe.")
     identity = fingerprint(record["data"])
     cached = store.tmdb_cached(kind, record_id, COUNTRY, identity)
-    if selected is not None:
+    if manual_id is not None:
+        if type(manual_id) is not int or manual_id <= 0 or selected is not None:
+            raise TMDBError("Identificador TMDB manual inválido.")
+        selected = manual_id
+    elif selected is not None:
         if not cached or cached["status"] != "candidates" or selected not in {item["id"] for item in cached["candidates"]}:
             raise TMDBError("La selección no pertenece a los candidatos actuales. Vuelve a consultar.")
     elif cached and not refresh:

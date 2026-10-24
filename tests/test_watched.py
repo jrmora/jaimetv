@@ -79,6 +79,40 @@ class WatchedMoviesTests(unittest.TestCase):
             self.assertEqual(db.execute("SELECT COUNT(*) FROM tmdb_metadata").fetchone()[0], 1)
         self.assertEqual(self.store.query("movies", watched="seen")["total"], 1)
 
+    def test_search_includes_watched_movies_and_keeps_active_eye(self):
+        self.data["movies"] = [
+            {"stream_id": 10, "name": "Harry Potter"},
+            {"stream_id": 11, "name": "Harry Potter 2"},
+            {"stream_id": 12, "name": "Harry blocked"},
+        ]
+        self.store.replace(self.data)
+        self.mark("10")
+        self.store.set_movie_banned("12", True)
+        for record_id in ("10", "11", "12"):
+            raw = self.store.detail("movies", record_id)["data"]
+            self.store.save_tmdb("movies", record_id, "CA", fingerprint(raw), {
+                "status": "matched", "genres": ["Familia"],
+            })
+        for path in ("/movies?q=harry&children=all&watched=unseen", "/kids/movies?q=harry&watched=unseen"):
+            page = self.client.get(path).get_data(as_text=True)
+            self.assertIn("Harry Potter", page)
+            self.assertIn('aria-label="Vista" aria-pressed="true"', page)
+            self.assertNotIn("Harry blocked", page)
+        payload = self.client.get(
+            "/api/catalog/movies?view=cards&q=harry&children=only&watched=unseen",
+        ).json
+        self.assertEqual(payload["total"], 2)
+        self.assertTrue(next(item for item in payload["items"] if item["id"] == "10")["watched"])
+        self.assertIn('aria-label="Vista" aria-pressed="true"', payload["html"])
+        seen = self.store.query("movies", q="harry", watched="seen", page=1)
+        self.assertEqual([item["id"] for item in seen["items"]], ["10"])
+        unseen = self.store.query("movies", q="", watched="unseen", page=1)
+        self.assertEqual([item["id"] for item in unseen["items"]], ["11"])
+        cleared = self.client.get(
+            "/api/catalog/movies?view=cards&q=%20%20&children=all&watched=unseen",
+        ).json
+        self.assertEqual([item["id"] for item in cleared["items"]], ["11"])
+
     def test_filters_apply_before_count_and_pagination(self):
         data = snapshot()
         data["movies"] = [

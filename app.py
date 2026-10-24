@@ -375,6 +375,7 @@ def create_app(db_path=None):
         return render_template(
             "admin.html", labels=LABELS, active="admin", kind=kind,
             coverages={value: store.tmdb_coverage(value) for value in ("movies", "series")},
+            movie_title_count=store.movie_title_count(),
             maintenance_dates=dates,
             maintenance_dates_display={
                 key: datetime.fromisoformat(value).astimezone(ZoneInfo("America/Toronto")).strftime("%Y-%m-%d %H:%M:%S %Z")
@@ -449,7 +450,8 @@ def create_app(db_path=None):
         }
         name = str(display_data.pop("name", "")).strip()
         title = str(display_data.pop("title", "")).strip()
-        record["name"] = name or title or "Sin título"
+        if record.get("version_count", 1) <= 1:
+            record["name"] = name or title or "Sin título"
 
         def comparable_title(value):
             without_year = re.sub(r"\s*\(\d{4}\)\s*$", "", value)
@@ -573,6 +575,7 @@ def create_app(db_path=None):
         if kind not in {"movies", "series"} or store.detail(kind, record_id) is None:
             abort(404, description="La ficha no existe o no admite TMDB.")
         selected = None
+        manual_id = None
         if request.method == "POST":
             token = request.form.get("csrf", "")
             expected = session.get("tmdb_csrf")
@@ -583,11 +586,22 @@ def create_app(db_path=None):
                     selected = int(request.form["selected"])
                 except ValueError:
                     abort(400, description="Candidato inválido.")
+            if "manual_tmdb" in request.form:
+                value = request.form["manual_tmdb"].strip()
+                media = "movie" if kind == "movies" else "tv"
+                match = re.fullmatch(
+                    rf"https://(?:www\.)?themoviedb\.org/{media}/([1-9][0-9]*)(?:-[^/?#\s]+)?/?(?:[?#][^\s]*)?",
+                    value,
+                )
+                identifier = match.group(1) if match else value
+                if selected is not None or not re.fullmatch(r"[1-9][0-9]{0,14}", identifier):
+                    abort(400, description="Introduce un ID positivo o un enlace TMDB del mismo tipo de ficha.")
+                manual_id = int(identifier)
         try:
             data = enrich(
                 store, kind, record_id,
                 client_factory=app.config.get("TMDB_CLIENT_FACTORY", TMDBClient),
-                refresh=request.method == "POST", selected=selected,
+                refresh=request.method == "POST", selected=selected, manual_id=manual_id,
             )
         except TMDBError as exc:
             app.logger.warning("No se pudo enriquecer la ficha con TMDB: %s", exc)

@@ -195,7 +195,9 @@ Las respuestas de Flask incluyen `X-Request-ID` y `Server-Timing`, visibles
 en la pestaña Red del navegador. Se miden el tiempo total del servidor,
 el tiempo dentro de conexiones SQLite (`sqlite`), el cierre de
 transacciones (`commit`, incluida reversión en caso de error), y las fases de consulta `rating_mean`, `count`
-y `select_rows`. `prepare_metadata` mide la preparación de metadatos cuando
+y `select_rows`. `prepare_versions` mide la identificación de versiones de
+películas y sus preferencias compartidas en una tabla temporal compacta.
+`prepare_metadata` mide la preparación de metadatos cuando
 hay búsqueda u orden por valoración: una tabla temporal privada de la conexión
 reutiliza identidad, valoración, año y personas entre las fases de consulta.
 Se elimina al cerrar la conexión, sin modificar el catálogo ni mantener una
@@ -246,7 +248,37 @@ completo. Los creadores también aparecen en los resultados por persona, pero no
 se confunden con directores. No se consulta TMDB al filtrar:
 solo se pueden encontrar las personas ya guardadas en la caché local.
 
+#### Enlace manual de TMDB
+
+Si los candidatos TMDB no incluyen la obra correcta, abre
+**Enlazar otra ficha de TMDB** en el detalle y pega su enlace de
+`themoviedb.org/movie/...` (películas), `themoviedb.org/tv/...` (series) o su ID
+numérico. **Enlazar ficha** consulta ese ID directamente y guarda la asociación
+local, sin cambiar los datos IPTV. También permite corregir una asociación
+existente. Un error conserva la asociación anterior y muestra el motivo;
+solo se aceptan enlaces del tipo correspondiente al catálogo.
+
 #### Películas vistas
+
+Las películas con el mismo ID TMDB confirmado y vigente se presentan como
+**una sola tarjeta**, incluidas copias HD/4K y de distintos idiomas. La tarjeta
+usa el título español guardado de TMDB y muestra **N versiones**; al abrirla
+aparecen las portadas y nombres originales en una galería adaptable a móvil.
+No se deduplican series, coincidencias de nombre/imagen por sí solas ni
+asociaciones TMDB pendientes, inválidas o desactualizadas.
+
+La agrupación se aplica antes de contar y paginar, también en búsquedas,
+resultados de personas y Mi lista. Buscar el nombre de cualquiera de las
+versiones encuentra la película. Las estadísticas y el contador de películas
+únicas de Administración cuentan una vez cada película. La cobertura TMDB
+sigue midiendo registros/versiones del proveedor, porque cada asociación
+necesita comprobarse; el CSV y la sincronización conservan todos los registros.
+
+Las versiones comparten **Vista**, **Quiero ver** y **No me interesa**.
+Una marca previa en cualquiera de ellas se aplica al grupo; desmarcarla la
+retira de todas las versiones asociadas actualmente. No se borran ni fusionan
+los JSON del proveedor, y una sincronización conserva estas preferencias.
+La valoración ponderada cuenta cada película una sola vez al calcular la media.
 
 El filtro **Época** de películas permite combinar **Recientes**
 (2015 en adelante), **Modernas** (2000–2014), **Nostalgia** (1980–1999),
@@ -282,6 +314,10 @@ permite mostrar todo, solo películas no vistas o solo vistas, junto con los dem
 filtros. Por defecto se selecciona **Películas que no he visto**; puedes elegir
 **Todo** para incluir también las vistas. Está disponible también en películas infantiles y de otros alfabetos,
 pero no en series.
+Al escribir una búsqueda, **Películas que no he visto** también incluye las vistas,
+identificadas con el botón del ojo verde activado. Al borrar la búsqueda vuelve
+a ocultarlas. **Volver a ver** sigue mostrando solo vistas; los demás filtros
+y la exclusión de películas bloqueadas se mantienen.
 
 Las marcas se guardan en la tabla `watched_movies` de SQLite, por identificador
 de película del proveedor, separadas de los datos originales y de TMDB.

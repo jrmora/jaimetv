@@ -26,7 +26,7 @@ class TMDBPeopleTests(unittest.TestCase):
     def cache(self, kind="movies", record_id="10", country="CA", status="matched", **fields):
         raw = self.store.detail(kind, record_id)["data"]
         self.store.save_tmdb(kind, record_id, country, fingerprint(raw), {
-            "status": status, "id": 63, "media": "movie" if kind == "movies" else "tv",
+            "status": status, "id": int(record_id), "media": "movie" if kind == "movies" else "tv",
             **fields,
         })
 

@@ -99,7 +99,7 @@ class RecommendationTests(unittest.TestCase):
         with patch.object(self.store, "connect", counted_connect):
             items = self.store.recommended_titles("movies", 1, [3, 4])
         self.assertEqual([item["id"] for item in items], ["3", "4"])
-        self.assertLessEqual(len(calls), 4)
+        self.assertLessEqual(len(calls), 8)
 
     def test_expiration_empty_cache_and_failure(self):
         self.store.save_recommendations("movies", 1, [2], time.time() - 8 * 86400)

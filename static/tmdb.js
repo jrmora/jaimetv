@@ -6,6 +6,8 @@
   const content = section.querySelector("#tmdb-content");
   const errorBox = section.querySelector("#tmdb-error");
   const refresh = section.querySelector("#tmdb-refresh");
+  const manualForm = section.querySelector("#tmdb-manual");
+  const manualControls = section.querySelector("#tmdb-manual-controls");
   const originalBackdrops = document.querySelectorAll("[data-original-backdrop]");
   let busy = false;
 
@@ -43,17 +45,19 @@
     }
   }, true);
 
-  async function load(post = false, selected = null) {
+  async function load(post = false, selected = null, manual = null) {
     if (busy) return;
     busy = true;
     section.setAttribute("aria-busy", "true");
     refresh.disabled = true;
+    if (manualControls) manualControls.disabled = true;
     errorBox.hidden = true;
     const options = {};
     if (post) {
       options.method = "POST";
       options.body = new URLSearchParams({ csrf: section.dataset.csrf });
       if (selected) options.body.set("selected", selected);
+      if (manual !== null) options.body.set("manual_tmdb", manual);
     }
     try {
       const response = await fetch(section.dataset.endpoint, options);
@@ -75,6 +79,7 @@
       updateBackdrop();
       updateOriginalFields();
       document.dispatchEvent(new Event("tmdb-updated"));
+      if (manual !== null) manualForm.reset();
     } catch (error) {
       errorBox.textContent = `No se pudo consultar TMDB. ${error.message}`;
       errorBox.hidden = false;
@@ -82,10 +87,15 @@
     } finally {
       busy = false;
       refresh.disabled = false;
+      if (manualControls) manualControls.disabled = false;
       section.setAttribute("aria-busy", "false");
     }
   }
   refresh.addEventListener("click", () => load(true));
+  manualForm?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    load(true, null, manualForm.elements.manual_tmdb.value.trim());
+  });
   content.addEventListener("click", (event) => {
     const candidate = event.target.closest(".tmdb-candidate");
     if (candidate) load(true, candidate.dataset.id);

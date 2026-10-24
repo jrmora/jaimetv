@@ -263,6 +263,61 @@ class CatalogStore:
                 )
             """)
 
+    def _movie_versions(self, db, record_id):
+        row = db.execute("""
+            SELECT s.stream_id AS id, s.name, s.raw_json, m.payload
+            FROM movies s LEFT JOIN tmdb_metadata m
+                ON m.kind='movies' AND m.country='CA' AND m.record_id=s.stream_id
+                AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
+                AND json_extract(m.payload, '$.status')='matched'
+            WHERE s.stream_id=?
+        """, (record_id,)).fetchone()
+        if row is None:
+            return []
+        metadata = json.loads(row["payload"]) if row["payload"] else {}
+        tmdb_id = metadata.get("id")
+        rows = [row]
+        if type(tmdb_id) is int and tmdb_id > 0:
+            rows = db.execute("""
+                SELECT s.stream_id AS id, s.name, s.raw_json, m.payload
+                FROM tmdb_metadata m JOIN movies s ON s.stream_id=m.record_id
+                WHERE m.kind='movies' AND m.country='CA'
+                    AND json_extract(m.payload, '$.status')='matched'
+                    AND json_type(m.payload, '$.id')='integer'
+                    AND json_extract(m.payload, '$.id')=?
+                    AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
+                ORDER BY s.stream_id
+            """, (tmdb_id,)).fetchall()
+        return [dict(item) for item in rows]
+
+    def _prepare_movie_versions(self, db):
+        started = time.perf_counter()
+        db.execute("""CREATE TEMP TABLE movie_versions AS
+            WITH identities AS MATERIALIZED (
+                SELECT s.stream_id AS record_id, m.record_id IS NOT NULL AS matched,
+                    CASE WHEN json_type(m.payload, '$.id')='integer'
+                        AND json_extract(m.payload, '$.id')>0
+                        THEN 'tmdb:' || json_extract(m.payload, '$.id')
+                        ELSE 'record:' || s.stream_id END AS group_key,
+                    EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.stream_id) AS watched,
+                    EXISTS (SELECT 1 FROM banned_movies b WHERE b.record_id=s.stream_id) AS banned,
+                    EXISTS (SELECT 1 FROM watchlist saved
+                        WHERE saved.kind='movies' AND saved.record_id=s.stream_id) AS watchlisted
+                FROM movies s LEFT JOIN tmdb_metadata m
+                    ON m.kind='movies' AND m.country='CA' AND m.record_id=s.stream_id
+                    AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
+                    AND json_extract(m.payload, '$.status')='matched'
+            )
+            SELECT record_id, matched, group_key,
+                COUNT(*) OVER same_movie AS version_count,
+                MAX(watched) OVER same_movie AS watched,
+                MAX(banned) OVER same_movie AS banned,
+                MAX(watchlisted) OVER same_movie AS watchlisted
+            FROM identities WINDOW same_movie AS (PARTITION BY group_key)
+        """)
+        db.execute("CREATE UNIQUE INDEX temp.idx_movie_versions_record ON movie_versions(record_id)")
+        record_timing("prepare_versions", started)
+
     def set_watchlisted(self, kind, record_id, enabled):
         if kind not in KINDS or not isinstance(enabled, bool):
             raise ValueError("Estado de lista inválido.")
@@ -270,11 +325,12 @@ class CatalogStore:
         with self.connect() as db:
             if db.execute(f"SELECT 1 FROM {table} WHERE {key}=?", (record_id,)).fetchone() is None:
                 return False
+            ids = [item["id"] for item in self._movie_versions(db, record_id)] if kind == "movies" else [record_id]
             if enabled:
-                db.execute("INSERT OR IGNORE INTO watchlist VALUES (?, ?, ?)",
-                           (kind, record_id, datetime.now(timezone.utc).isoformat(timespec="seconds")))
+                db.executemany("INSERT OR IGNORE INTO watchlist VALUES (?, ?, ?)",
+                               [(kind, item, datetime.now(timezone.utc).isoformat(timespec="seconds")) for item in ids])
             else:
-                db.execute("DELETE FROM watchlist WHERE kind=? AND record_id=?", (kind, record_id))
+                db.executemany("DELETE FROM watchlist WHERE kind=? AND record_id=?", [(kind, item) for item in ids])
         return True
 
     def set_movie_watched(self, record_id, watched):
@@ -289,15 +345,16 @@ class CatalogStore:
 
     def _set_movie_state(self, table, record_id, enabled):
         with self.connect() as db:
-            if db.execute("SELECT 1 FROM movies WHERE stream_id=?", (record_id,)).fetchone() is None:
+            versions = self._movie_versions(db, record_id)
+            if not versions:
                 return False
             if enabled:
-                db.execute(
+                db.executemany(
                     f"INSERT OR IGNORE INTO {table} VALUES (?, ?)",
-                    (record_id, datetime.now(timezone.utc).isoformat(timespec="seconds")),
+                    [(item["id"], datetime.now(timezone.utc).isoformat(timespec="seconds")) for item in versions],
                 )
             else:
-                db.execute(f"DELETE FROM {table} WHERE record_id=?", (record_id,))
+                db.executemany(f"DELETE FROM {table} WHERE record_id=?", [(item["id"],) for item in versions])
         return True
 
     def subscriptions(self):
@@ -447,12 +504,21 @@ class CatalogStore:
                 continue
             seen.add(row["tmdb_id"])
             raw, metadata = json.loads(row["raw_json"]), json.loads(row["payload"])
-            items.append({
+            item = {
                 "id": row["id"], "name": row["name"],
                 "watchlisted": bool(row["watchlisted"]),
                 "poster_url": valid_image(raw.get("stream_icon")) or valid_image(raw.get("cover")),
                 "year": release_year(metadata.get("release_date")),
-            })
+            }
+            if kind == "movies":
+                grouped = self.detail(kind, row["id"])
+                if grouped is None:
+                    continue
+                item.update(
+                    name=grouped["name"], version_count=grouped["version_count"],
+                    watchlisted=grouped["watchlisted"],
+                )
+            items.append(item)
             if len(items) == 6:
                 break
         return items
@@ -692,6 +758,8 @@ class CatalogStore:
         )
         conditions, params = [], []
         watchlist_expression = f"EXISTS (SELECT 1 FROM watchlist saved WHERE saved.kind='{kind}' AND saved.record_id=s.{key})"
+        if kind == "movies":
+            watchlist_expression = "versions.watchlisted"
         if watchlist:
             conditions.append(watchlist_expression)
         if eras:
@@ -717,9 +785,13 @@ class CatalogStore:
                 params.append(tmdb_status)
         banned_expression = "EXISTS (SELECT 1 FROM banned_movies b WHERE b.record_id=s.stream_id)"
         if kind == "movies":
+            banned_expression = "versions.banned"
+        if kind == "movies":
             conditions.append(banned_expression if banned == "only" else f"NOT {banned_expression}")
         watched_expression = "EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.stream_id)"
-        if watched != "all":
+        if kind == "movies":
+            watched_expression = "versions.watched"
+        if watched != "all" and not (watched == "unseen" and q.strip()):
             conditions.append(watched_expression if watched == "seen" else f"NOT {watched_expression}")
         people_metadata = "COALESCE(score.people, '{}')" if materialize_metadata else "PEOPLE_METADATA(NULL, score.payload)"
         if q:
@@ -798,15 +870,33 @@ class CatalogStore:
             params.extend((kind, access, access, *services))
         where = " WHERE " + " AND ".join(conditions) if conditions else ""
         source = f"{table} s LEFT JOIN {categories} c ON c.category_id = s.category_id"
+        if kind == "movies":
+            source += " JOIN movie_versions versions ON versions.record_id=s.stream_id"
         if materialize_metadata:
             source += f" LEFT JOIN query_metadata score ON score.record_id=s.{key}"
         else:
-            source += f""" LEFT JOIN tmdb_metadata score
+            source += (""" LEFT JOIN tmdb_metadata score
+                ON score.kind='movies' AND score.country='CA'
+                AND score.record_id=s.stream_id AND versions.matched""" if kind == "movies" else f""" LEFT JOIN tmdb_metadata score
                 ON score.kind='{kind}' AND score.record_id=s.{key} AND score.country='CA'
                 AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                AND json_extract(score.payload, '$.status')='matched'"""
+                AND json_extract(score.payload, '$.status')='matched'""")
         watched_projection = f", {watched_expression} AS watched, {banned_expression} AS banned" if kind == "movies" else ""
+        display_name = "s.name"
+        group_by = ""
+        identity_projection = f"s.{key}"
+        version_projection = ""
+        if kind == "movies":
+            display_name = "CASE WHEN versions.version_count>1 THEN COALESCE(NULLIF(json_extract(score.payload, '$.title'), ''), s.name) ELSE s.name END"
+            group_by = " GROUP BY versions.group_key"
+            # SQLite takes bare columns from the row supplying this single MIN.
+            identity_projection = f"MIN(s.{key})"
+            version_projection = ", versions.version_count AS version_count"
+            if sort_by == "name":
+                order = f"CASEFOLD({display_name})"
         with self.connect() as db:
+            if kind == "movies":
+                self._prepare_movie_versions(db)
             if materialize_metadata:
                 started = time.perf_counter()
                 db.execute("""CREATE TEMP TABLE query_metadata (
@@ -817,15 +907,22 @@ class CatalogStore:
                 if children != "all":
                     people_condition = membership if children == "only" else f"NOT {membership}"
                     people = f"CASE WHEN {people_condition} THEN {people} END"
+                metadata_source = (
+                    """movie_versions v JOIN tmdb_metadata score
+                        ON score.kind='movies' AND score.country='CA'
+                        AND score.record_id=v.record_id""" if kind == "movies" else
+                    f"tmdb_metadata score JOIN {table} s ON s.{key}=score.record_id"
+                )
+                metadata_condition = (
+                    "v.matched" if kind == "movies" else
+                    "score.kind=? AND score.country='CA' AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json) AND json_extract(score.payload, '$.status')='matched'"
+                )
                 db.execute(f"""INSERT INTO query_metadata
                     SELECT score.record_id, score.payload, {valid_rating},
                         CASE WHEN ({valid_rating}) IS NOT NULL THEN json_extract(score.payload, '$.votes') END,
                         RELEASE_YEAR(json_extract(score.payload, '$.release_date')), {people}
-                    FROM tmdb_metadata score JOIN {table} s ON s.{key}=score.record_id
-                    WHERE score.kind=? AND score.country='CA'
-                        AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                        AND json_extract(score.payload, '$.status')='matched'
-                """, (kind,))
+                    FROM {metadata_source} WHERE {metadata_condition}
+                """, () if kind == "movies" else (kind,))
                 record_timing("prepare_metadata", started)
             total = None
             limit = ""
@@ -846,12 +943,16 @@ class CatalogStore:
             query_params = list(params)
             if sort_by == "rating":
                 started = time.perf_counter()
-                mean = db.execute(f"SELECT AVG({tmdb_rating}) FROM {source}").fetchone()[0]
+                mean_identity = f", MIN(s.{key})" if kind == "movies" else ""
+                mean = db.execute(
+                    f"SELECT AVG(value) FROM (SELECT {tmdb_rating} AS value{mean_identity} FROM {source}{group_by})"
+                ).fetchone()[0]
                 record_timing("rating_mean", started)
                 query_params.extend((mean, mean))
             if page is not None:
                 started = time.perf_counter()
-                total = db.execute(f"SELECT COUNT(*) FROM {source}{where}", params).fetchone()[0]
+                count = "COUNT(DISTINCT versions.group_key)" if kind == "movies" else "COUNT(*)"
+                total = db.execute(f"SELECT {count} FROM {source}{where}", params).fetchone()[0]
                 record_timing("count", started)
                 pages = max(1, (total + 49) // 50)
                 page = min(page, pages)
@@ -859,7 +960,7 @@ class CatalogStore:
                 query_params.extend((50, (page - 1) * 50))
             started = time.perf_counter()
             rows = db.execute(
-                f"""SELECT s.{key} AS id, s.name, s.category_id, {tmdb_rating} AS rating,
+                f"""SELECT {identity_projection} AS id, {display_name} AS name, s.category_id, {tmdb_rating} AS rating,
                            {votes} AS votes, {year} AS year, {watchlist_expression} AS watchlisted,
                            {genre_expression} AS genre, COALESCE(c.category_name, 'Sin categoría') AS category_name,
                            json_extract(s.raw_json, '$.youtube_trailer') AS youtube_trailer,
@@ -867,8 +968,9 @@ class CatalogStore:
                            json_extract(s.raw_json, '$.cover') AS preview_cover
                            {watched_projection}
                            {provider_projection}
-                    FROM {source}{where}
-                    ORDER BY ({order}) IS NULL, {order} {sort}{secondary_order}, CASEFOLD(s.name), s.{key}
+                           {version_projection}
+                    FROM {source}{where}{group_by}
+                    ORDER BY ({order}) IS NULL, {order} {sort}{secondary_order}, CASEFOLD({display_name}), s.{key}
                     {limit}
                     """,
                 projection_params + query_params,
@@ -902,14 +1004,16 @@ class CatalogStore:
             row = db.execute(
                 f"SELECT name, raw_json FROM {table} WHERE {key} = ?", (record_id,)
             ).fetchone()
+            versions = self._movie_versions(db, record_id) if kind == "movies" and row else []
+            ids = json.dumps([item["id"] for item in versions] if kind == "movies" else [record_id])
             watched = kind == "movies" and db.execute(
-                "SELECT 1 FROM watched_movies WHERE record_id=?", (record_id,),
+                "SELECT 1 FROM watched_movies WHERE record_id IN (SELECT value FROM json_each(?))", (ids,),
             ).fetchone() is not None
             banned = kind == "movies" and db.execute(
-                "SELECT 1 FROM banned_movies WHERE record_id=?", (record_id,),
+                "SELECT 1 FROM banned_movies WHERE record_id IN (SELECT value FROM json_each(?))", (ids,),
             ).fetchone() is not None
             watchlisted = db.execute(
-                "SELECT 1 FROM watchlist WHERE kind=? AND record_id=?", (kind, record_id),
+                "SELECT 1 FROM watchlist WHERE kind=? AND record_id IN (SELECT value FROM json_each(?))", (kind, ids),
             ).fetchone() is not None
         if row is None:
             return None
@@ -917,16 +1021,33 @@ class CatalogStore:
         if kind == "movies":
             result["watched"] = watched
             result["banned"] = banned
+            result["version_count"] = len(versions)
+            result["versions"] = []
+            for version in versions:
+                raw = json.loads(version["raw_json"])
+                result["versions"].append({
+                    "id": version["id"], "name": version["name"],
+                    "poster_url": valid_image(raw.get("stream_icon")) or valid_image(raw.get("cover")),
+                })
+            if len(versions) > 1:
+                metadata = json.loads(versions[0]["payload"])
+                result["name"] = metadata.get("title") or row["name"]
         return result
 
     def stats(self):
         totals, largest = {}, []
         with self.connect() as db:
+            self._prepare_movie_versions(db)
             for kind, (table, categories, _) in KINDS.items():
-                totals[kind] = db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                source = f"{table} s LEFT JOIN {categories} c ON c.category_id = s.category_id"
+                count = "COUNT(*)"
+                if kind == "movies":
+                    source += " JOIN movie_versions versions ON versions.record_id=s.stream_id"
+                    count = "COUNT(DISTINCT versions.group_key)"
+                totals[kind] = db.execute(f"SELECT {count} FROM {source}").fetchone()[0]
                 rows = db.execute(f"""
-                    SELECT c.category_id, COALESCE(c.category_name, 'Sin categoría') AS category, COUNT(*) AS total
-                    FROM {table} s LEFT JOIN {categories} c ON c.category_id = s.category_id
+                    SELECT c.category_id, COALESCE(c.category_name, 'Sin categoría') AS category, {count} AS total
+                    FROM {source}
                     GROUP BY c.category_id, c.category_name
                     ORDER BY total DESC, CASEFOLD(category) LIMIT 10
                 """).fetchall()
@@ -937,6 +1058,11 @@ class CatalogStore:
             "largest": sorted(largest, key=lambda item: (-item["total"], item["kind"], item["category"]))[:10],
             "synced_at": metadata[0] if metadata else None,
         }
+
+    def movie_title_count(self):
+        with self.connect() as db:
+            self._prepare_movie_versions(db)
+            return db.execute("SELECT COUNT(DISTINCT group_key) FROM movie_versions").fetchone()[0]
 
     def export(self, kind, destination):
         table, _, key = KINDS[kind]

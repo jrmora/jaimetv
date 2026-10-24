@@ -26,8 +26,15 @@ async function fixture(image = null, replacements = []) {
     addEventListener() {},
   };
   const refresh = { addEventListener(type, callback) { this.click = callback; } };
+  const manualForm = {
+    elements: { manual_tmdb: { value: "" } },
+    addEventListener(type, callback) { this.submit = callback; },
+    reset() { this.elements.manual_tmdb.value = ""; },
+  };
+  const manualControls = { disabled: false };
   const errorBox = { hidden: true };
-  const elements = { "#tmdb-content": content, "#tmdb-error": errorBox, "#tmdb-refresh": refresh };
+  const elements = { "#tmdb-content": content, "#tmdb-error": errorBox, "#tmdb-refresh": refresh,
+    "#tmdb-manual": manualForm, "#tmdb-manual-controls": manualControls };
   const section = {
     dataset: { endpoint: "/tmdb", csrf: "test" },
     querySelector(selector) { return elements[selector]; },
@@ -36,6 +43,7 @@ async function fixture(image = null, replacements = []) {
   };
   let nextImage = image;
   let failure = false;
+  const requests = [];
   runInNewContext(script, {
     Event,
     document: {
@@ -43,7 +51,8 @@ async function fixture(image = null, replacements = []) {
       querySelector(selector) { return selector === "#tmdb-section" ? section : null; },
       querySelectorAll(selector) { return selector === "[data-original-backdrop]" ? originals : fields; },
     },
-    fetch: async () => {
+    fetch: async (url, options) => {
+      requests.push({ url, options });
       if (failure) throw new Error("Network error");
       return { ok: true, json: async () => ({ html: "" }) };
     },
@@ -54,7 +63,13 @@ async function fixture(image = null, replacements = []) {
   });
   await new Promise(setImmediate);
   return {
-    originals, content, errorBox, fields,
+    originals, content, errorBox, fields, requests, manualForm, manualControls,
+    async manual(reference, fail = false) {
+      failure = fail;
+      manualForm.elements.manual_tmdb.value = reference;
+      manualForm.submit({ preventDefault() {} });
+      await new Promise(setImmediate);
+    },
     emit(type, target) { listeners[type]({ target }); },
     async refresh(image, fail = false, replacements = []) {
       nextImage = image;
@@ -84,6 +99,23 @@ test("originals stay visible until TMDB loads; successful load hides all origina
   image.naturalWidth = 0;
   ui.emit("error", image);
   assert.ok(ui.originals.every(item => !item.hidden));
+});
+
+test("manual TMDB link posts reference and CSRF, preserving input on error", async () => {
+  const ui = await fixture();
+  const reference = "https://www.themoviedb.org/movie/999";
+  await ui.manual(reference, true);
+  assert.equal(ui.errorBox.hidden, false);
+  assert.equal(ui.manualForm.elements.manual_tmdb.value, reference);
+  assert.equal(ui.manualControls.disabled, false);
+  await ui.manual(reference);
+  const request = ui.requests.at(-1).options;
+  assert.equal(request.method, "POST");
+  assert.equal(request.body.get("manual_tmdb"), reference);
+  assert.equal(request.body.get("csrf"), "test");
+  assert.equal(request.body.has("selected"), false);
+  assert.equal(ui.manualForm.elements.manual_tmdb.value, "");
+  assert.equal(ui.manualControls.disabled, false);
 });
 
 test("missing, pending and failed replacements restore the originals", async () => {
