@@ -521,7 +521,7 @@ def create_app(db_path=None):
             position = ordered_keys.index("genre") + 1
             ordered_keys[position:position] = category_keys
         fields = [
-            (key, json.dumps(display_data[key], ensure_ascii=False, indent=2))
+            (key, value if isinstance(value := display_data[key], str) else json.dumps(value, ensure_ascii=False, indent=2))
             for key in ordered_keys
             if key not in {"num", "stream_id", "series_id", "container_extension", "added"}
         ]
@@ -612,7 +612,7 @@ def create_app(db_path=None):
             return jsonify(error=str(exc)), 502
         trailer = data.get("trailer_url")
         trailer_match = re.fullmatch(r"https://www\.youtube\.com/watch\?v=([A-Za-z0-9_-]{11})", trailer) if isinstance(trailer, str) else None
-        return jsonify(content_labels=render_template("content_labels.html", tmdb=data), html=render_template(
+        return jsonify(status=data.get("status"), content_labels=render_template("content_labels.html", tmdb=data), html=render_template(
             "tmdb.html", tmdb=data, provider_icons=provider_icons(data.get("providers", {})),
             trailer_id=trailer_match.group(1) if trailer_match else None,
         ))

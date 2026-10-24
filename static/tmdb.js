@@ -9,6 +9,7 @@
   const manualForm = section.querySelector("#tmdb-manual");
   const manualControls = section.querySelector("#tmdb-manual-controls");
   const originalBackdrops = document.querySelectorAll("[data-original-backdrop]");
+  const providerMetadata = document.querySelector("#provider-metadata");
   let busy = false;
 
   function updateOriginalFields() {
@@ -78,12 +79,14 @@
       }
       updateBackdrop();
       updateOriginalFields();
+      if (providerMetadata) providerMetadata.hidden = !["candidates", "missing"].includes(result.status);
       document.dispatchEvent(new Event("tmdb-updated"));
       if (manual !== null) manualForm.reset();
     } catch (error) {
       errorBox.textContent = `No se pudo consultar TMDB. ${error.message}`;
       errorBox.hidden = false;
       if (content.textContent.includes("Consultando TMDB")) content.replaceChildren();
+      if (providerMetadata && !content.childElementCount) providerMetadata.hidden = false;
     } finally {
       busy = false;
       refresh.disabled = false;

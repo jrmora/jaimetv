@@ -142,3 +142,5 @@ td { overflow-wrap: anywhere; }
   .detail-layout.has-versions #detail-score,
   .detail-layout.has-versions .detail-actions { grid-column: 1; }
 }
+.provider-metadata summary { cursor: pointer; font-weight: 600; }
+.provider-metadata th { width: 35%; overflow-wrap: anywhere; }

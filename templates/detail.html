@@ -63,6 +63,29 @@
       {% endif %}
       {{ watchlist_button(kind, request.args.get('id'), record.watchlisted, sync_csrf, responsive=true) }}
     </div>
+    {% if fields %}
+    <details id="provider-metadata" class="provider-metadata border rounded p-3 mt-4"
+             {% if kind in ['movies', 'series'] and (content_metadata or {}).get('status') not in ['candidates', 'missing'] %}hidden{% endif %}>
+      <summary>Metadatos del proveedor</summary>
+      <div class="table-responsive mt-2">
+        <table class="table table-sm mb-0">
+          <tbody>
+            {% for key, value in fields %}
+            <tr><th scope="row" data-field="{{ key }}">{{ field_labels.get(key, key.replace("_", " ").capitalize()) }}</th><td>
+              {% if key in people %}
+                {% for name in people[key] %}<a class="person-link" href="{{ url_for('person_results', name=name) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+              {% elif key in category_links %}
+                {% for category_id, name in category_links[key] %}<a class="category-link" href="{{ url_for(category_endpoint, kind=kind, foreign=category_foreign, category=category_id) }}">{{ name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+              {% elif key == 'youtube_trailer' and trailer_url %}
+                {{ trailer_link({'name': record.name, 'trailer_url': trailer_url}) }}
+              {% else %}<pre class="detail-value mb-0">{{ value }}</pre>{% endif %}
+            </td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endif %}
     {% if kind in ['movies', 'series'] %}
     <div id="tmdb-section" class="border rounded p-3 my-4" role="region"
              aria-label="Información de TMDB"

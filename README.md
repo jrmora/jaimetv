@@ -258,6 +258,12 @@ local, sin cambiar los datos IPTV. También permite corregir una asociación
 existente. Un error conserva la asociación anterior y muestra el motivo;
 solo se aceptan enlaces del tipo correspondiente al catálogo.
 
+Mientras una película o serie no tenga una ficha TMDB confirmada (candidatos
+pendientes o sin coincidencia), el detalle muestra el bloque colapsable
+**Metadatos del proveedor** con los datos originales IPTV (año, sinopsis,
+reparto, géneros, categorías…), útiles para identificarla. Se oculta al
+confirmar una ficha.
+
 #### Películas vistas
 
 Las películas con el mismo ID TMDB confirmado y vigente se presentan como

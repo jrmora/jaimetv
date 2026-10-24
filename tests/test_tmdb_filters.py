@@ -237,6 +237,19 @@ class TMDBFilterTests(unittest.TestCase):
                 else:
                     self.assertIn("Sin valoración disponible en TMDB", html)
 
+    def test_unmatched_detail_shows_collapsible_provider_metadata(self):
+        for status in ("candidates", "missing"):
+            self.cache(status=status, candidates=[])
+            detail = self.client.get("/catalog/movies/detail?id=10").get_data(as_text=True)
+            block = re.search(r'<details id="provider-metadata"([^>]*)>(.*?)</details>', detail, re.S)
+            self.assertIsNotNone(block, status)
+            self.assertNotIn("hidden", block.group(1))
+            self.assertNotIn(" open", block.group(1))
+            self.assertIn("Metadatos del proveedor", block.group(2))
+            self.assertIn('data-field="genre"', block.group(2))
+            self.assertIn("Director proveedor", block.group(2))
+            self.assertEqual(self.client.get("/api/tmdb/movies/10").json["status"], status)
+
     def test_missing_unconfirmed_and_stale_metadata_never_fall_back(self):
         self.assertEqual(self.store.query("movies")["total"], 4)
         self.assertEqual(self.store.query("movies", era="nostalgia")["total"], 0)
@@ -277,7 +290,7 @@ class TMDBFilterTests(unittest.TestCase):
         for kind, record_id in (("movies", "10"), ("series", "20")):
             self.cache(kind, record_id)
             detail = self.client.get(f"/catalog/{kind}/detail?id={record_id}").get_data(as_text=True)
-            self.assertNotIn('data-field=', detail)
+            self.assertRegex(detail, r'<details id="provider-metadata"[^>]*\s+hidden>')
             self.assertIn('id="tmdb-section"', detail)
             html = self.client.get(f"/api/tmdb/{kind}/{record_id}").json["html"]
             links = re.findall(r'class="genre-link" href="([^"]+)"', html)

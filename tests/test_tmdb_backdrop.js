@@ -43,18 +43,23 @@ async function fixture(image = null, replacements = []) {
   };
   let nextImage = image;
   let failure = false;
+  let nextStatus = "matched";
+  const providerMetadata = { hidden: true };
   const requests = [];
   runInNewContext(script, {
     Event,
     document: {
       dispatchEvent() {},
-      querySelector(selector) { return selector === "#tmdb-section" ? section : null; },
+      querySelector(selector) {
+        if (selector === "#provider-metadata") return providerMetadata;
+        return selector === "#tmdb-section" ? section : null;
+      },
       querySelectorAll(selector) { return selector === "[data-original-backdrop]" ? originals : fields; },
     },
     fetch: async (url, options) => {
       requests.push({ url, options });
       if (failure) throw new Error("Network error");
-      return { ok: true, json: async () => ({ html: "" }) };
+      return { ok: true, json: async () => ({ html: "", status: nextStatus }) };
     },
     DOMParser: class {
       parseFromString() { return { body: { childNodes: nextImage ? [nextImage] : [] } }; }
@@ -63,7 +68,8 @@ async function fixture(image = null, replacements = []) {
   });
   await new Promise(setImmediate);
   return {
-    originals, content, errorBox, fields, requests, manualForm, manualControls,
+    originals, content, errorBox, fields, requests, manualForm, manualControls, providerMetadata,
+    setStatus(status) { nextStatus = status; },
     async manual(reference, fail = false) {
       failure = fail;
       manualForm.elements.manual_tmdb.value = reference;
@@ -171,4 +177,19 @@ test("request failure keeps original fields visible initially and preserves the 
   await ui.refresh(null, true);
   assert.equal(ui.fields[0].row.hidden, true);
   assert.equal(ui.errorBox.hidden, false);
+});
+
+test("provider metadata is only shown when TMDB has no confirmed match", async () => {
+  const ui = await fixture();
+  assert.equal(ui.providerMetadata.hidden, true);
+  for (const status of ["candidates", "missing"]) {
+    ui.setStatus(status);
+    await ui.refresh(null);
+    assert.equal(ui.providerMetadata.hidden, false, status);
+  }
+  ui.setStatus("matched");
+  await ui.refresh(null);
+  assert.equal(ui.providerMetadata.hidden, true);
+  await ui.refresh(null, true);
+  assert.equal(ui.providerMetadata.hidden, false);
 });
