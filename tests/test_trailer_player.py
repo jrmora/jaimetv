@@ -16,7 +16,7 @@ class TrailerPlayerTests(unittest.TestCase):
         data = movie_details()
         data["videos"]["results"] = [
             {"site": "YouTube", "type": "Trailer", "key": "abcdefghijk", "official": True, "iso_639_1": "en"},
-            {"site": "YouTube", "type": "Trailer", "key": "nsuk8ThvnpM", "official": True, "iso_639_1": "es"},
+            {"site": "YouTube", "type": "Trailer", "key": "nsuk8ThvnpM", "official": True, "iso_639_1": "es", "iso_3166_1": "MX"},
         ]
         with patch.object(client, "get", return_value=data) as get:
             result = client.details("movies", 63)
@@ -24,11 +24,36 @@ class TrailerPlayerTests(unittest.TestCase):
             self.assertEqual(get.call_count, 1)
         data["videos"]["results"] = []
         with patch.object(client, "get", side_effect=[data, {"results": [
-            {"site": "YouTube", "type": "Trailer", "key": "abcdefghijk", "official": True},
+            {"site": "YouTube", "type": "Trailer", "key": "abcdefghijk", "official": True, "iso_639_1": "en"},
         ]}]) as get:
             result = client.details("series", 63)
             self.assertTrue(result["trailer_url"].endswith("abcdefghijk"))
-            self.assertEqual(get.call_args.args, ("tv/63/videos", {"language": "en-US"}))
+            self.assertEqual(get.call_args.args, ("tv/63/videos",))
+
+    def test_latin_america_then_spanish_english_and_original(self):
+        client = object.__new__(TMDBClient)
+        data = movie_details()
+        data["original_language"] = "ja"
+        data["videos"]["results"] = [
+            {"site": "YouTube", "type": "Trailer", "key": "nsuk8ThvnpM",
+             "iso_639_1": "es", "iso_3166_1": "ES", "official": True},
+        ]
+        alternatives = [
+            {"site": "YouTube", "type": "Trailer", "key": "abcdefghijk",
+             "iso_639_1": "es", "iso_3166_1": "CO"},
+            {"site": "YouTube", "type": "Trailer", "key": "bcdefghijkl", "iso_639_1": "en"},
+            {"site": "YouTube", "type": "Trailer", "key": "cdefghijklm", "iso_639_1": "ja"},
+        ]
+        for expected in ("abcdefghijk", "nsuk8ThvnpM", "bcdefghijkl", "cdefghijklm", None):
+            with patch.object(client, "get", side_effect=[data, {"results": alternatives}]):
+                result = client.details("movies", 63)
+            self.assertEqual(result["trailer_url"], f"https://www.youtube.com/watch?v={expected}" if expected else None)
+            if expected == "abcdefghijk":
+                alternatives.pop(0)
+            elif expected == "nsuk8ThvnpM":
+                data["videos"]["results"] = []
+            elif alternatives:
+                alternatives.pop(0)
 
     def test_cached_trailer_is_lazy_and_invalid_urls_are_not_embedded(self):
         with tempfile.TemporaryDirectory() as directory:

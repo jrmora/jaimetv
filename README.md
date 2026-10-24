@@ -150,9 +150,12 @@ en grupos compactos con iconos. Si no hay ninguna, muestra un único aviso.
 conecta con YouTube hasta pulsarlo; «Cerrar tráiler» retira el reproductor y
 detiene el vídeo. Se conserva un enlace externo por si el autor no permite
 reproducción integrada. El reproductor puede mostrar publicidad.
-Al consultar la ficha TMDB se priorizan tráileres en español y oficiales;
-también se incluyen vídeos en inglés y, si no aparece ninguno, se consulta el
-listado en inglés como alternativa. Las fichas ya guardadas no se vuelven a
+Al consultar la ficha TMDB se prioriza español latinoamericano, después otro
+español, inglés y finalmente el idioma original. Dentro de cada grupo se
+prefieren vídeos oficiales. La región del vídeo en TMDB es una aproximación,
+no una garantía del doblaje. Si la respuesta inicial no incluye un tráiler
+latinoamericano, se consulta el listado sin filtro de idioma para comparar
+las alternativas. Las fichas ya guardadas no se vuelven a
 consultar automáticamente: si no tenían tráiler, pulsa «Actualizar TMDB» para
 probar la nueva selección. No se extraen vídeos de IMDb.
 

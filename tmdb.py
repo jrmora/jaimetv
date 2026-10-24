@@ -260,15 +260,29 @@ class TMDBClient:
         providers = data.get("watch/providers", {}).get("results", {}).get(COUNTRY, {})
         videos = data.get("videos", {}).get("results", [])
         trailers = [v for v in videos if v.get("site") == "YouTube" and v.get("type") == "Trailer" and youtube_trailer_url(v.get("key"))]
-        trailers.sort(key=lambda v: (v.get("iso_639_1") not in {"es", None}, not v.get("official", False)))
-        if not trailers:
-            response = self.get(f"{media}/{tmdb_id}/videos", {"language": "en-US"})
+        latin_countries = {"MX", "AR", "BO", "CL", "CO", "CR", "CU", "DO", "EC",
+                           "SV", "GT", "HN", "NI", "PA", "PY", "PE", "PR", "UY", "VE"}
+        def trailer_priority(video):
+            language = video.get("iso_639_1")
+            if language == "es":
+                priority = 0 if video.get("iso_3166_1") in latin_countries else 1
+            elif language == "en":
+                priority = 2
+            elif language and language == data.get("original_language"):
+                priority = 3
+            else:
+                priority = 4
+            return priority, not video.get("official", False)
+
+        if not any(trailer_priority(video)[0] == 0 for video in trailers):
+            response = self.get(f"{media}/{tmdb_id}/videos")
             videos = response.get("results")
             if not isinstance(videos, list):
                 raise TMDBError("TMDB devolvió una lista de vídeos inválida.")
-            trailers = [v for v in videos if isinstance(v, dict) and v.get("site") == "YouTube"
-                        and v.get("type") == "Trailer" and youtube_trailer_url(v.get("key"))]
-            trailers.sort(key=lambda v: not v.get("official", False))
+            trailers.extend(v for v in videos if isinstance(v, dict) and v.get("site") == "YouTube"
+                            and v.get("type") == "Trailer" and youtube_trailer_url(v.get("key")))
+        trailers = [v for v in trailers if trailer_priority(v)[0] < 4]
+        trailers.sort(key=trailer_priority)
         trailer = trailers[0] if trailers else None
         backdrop = data.get("backdrop_path")
         backdrop_url = None

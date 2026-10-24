@@ -7,6 +7,8 @@ td { overflow-wrap: anywhere; }
 [hidden] { display: none !important; }
 
 .detail-poster { display: block; width: 100%; max-width: 320px; height: auto; margin-inline: auto; }
+.detail-actions form { margin-top: 0 !important; }
+.detail-actions button { min-height: 44px; display: inline-flex; align-items: center; justify-content: center; }
 
 .icon-button, #theme-toggle { min-width: 44px; min-height: 44px; font-size: 1.25rem; }
 
@@ -24,11 +26,9 @@ td { overflow-wrap: anywhere; }
   .detail-layout #content-labels { grid-column: 2; grid-row: 2; }
   .detail-layout #detail-score { grid-column: 2; grid-row: 3; align-self: start; }
   .detail-layout .detail-actions { grid-column: 2; grid-row: 4; align-self: start; }
-  .detail-actions form { margin-top: 0 !important; }
   .detail-layout #tmdb-section,
   .detail-layout > section > .table-responsive,
   .detail-layout > section > figure { grid-column: 1 / -1; min-width: 0; margin: 0 !important; }
-  .detail-layout .watched-form button, .detail-layout .banned-form button { min-height: 44px; }
   .tmdb-details-table, .tmdb-details-table tbody, .tmdb-details-table tr,
   .tmdb-details-table th, .tmdb-details-table td { display: block; width: 100%; }
   .tmdb-details-table tr { display: grid; grid-template-columns: minmax(0, 35%) minmax(0, 1fr); border-bottom: 1px solid var(--bs-border-color); }

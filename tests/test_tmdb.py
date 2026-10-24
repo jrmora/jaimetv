@@ -26,7 +26,7 @@ def movie_details():
             "cast": [{"name": "Bruce Willis", "character": "James Cole"}],
         },
         "videos": {"results": [
-            {"site": "YouTube", "type": "Trailer", "key": "nsuk8ThvnpM", "official": False},
+            {"site": "YouTube", "type": "Trailer", "key": "nsuk8ThvnpM", "official": False, "iso_639_1": "es", "iso_3166_1": "MX"},
         ]},
         "watch/providers": {"results": {
             "CA": {"flatrate": [{"provider_name": "Crave"}], "rent": [{"provider_name": "YouTube"}]},
