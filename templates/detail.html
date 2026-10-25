@@ -25,13 +25,13 @@
     <h2 class="h6">{{ record.version_count }} versiones disponibles</h2>
     <div class="version-posters">
       {% for version in record.versions %}
-      <figure class="mb-0">
+      <figure class="mb-0{% if version.unavailable %} is-unavailable{% endif %}">
         {% if version.poster_url %}
         <img src="{{ version.poster_url }}" alt="Portada de {{ version.name }}" class="detail-poster rounded border bg-body-tertiary"
              data-error-id="version-error-{{ loop.index }}" loading="lazy" referrerpolicy="no-referrer">
         <p id="version-error-{{ loop.index }}" class="small text-muted" role="status" hidden>No se pudo cargar la portada.</p>
         {% else %}<p class="small text-muted">Sin portada</p>{% endif %}
-        <figcaption class="small text-break mt-1">{{ version.name }}</figcaption>
+        <figcaption class="small text-break mt-1">{{ version.name }}{% if version.unavailable %} <span class="badge text-bg-danger">Ya no disponible</span>{% endif %}</figcaption>
       </figure>
       {% endfor %}
     </div>
@@ -50,6 +50,9 @@
       <h1 class="text-break mb-0">{{ record.name }}</h1>
       <a id="back-button" class="btn btn-outline-secondary icon-button flex-shrink-0" href="{{ back_url or url_for('listing', kind='movies') }}" aria-label="Atrás" title="Atrás"><span aria-hidden="true">←</span></a>
     </header>
+    {% if record.get('unavailable') %}
+    <p class="alert alert-danger py-2" role="status">El proveedor ya no ofrece este título. Se conserva en tu catálogo, pero probablemente no se pueda reproducir.</p>
+    {% endif %}
     <div id="content-labels" aria-live="polite">
       {% with tmdb=content_metadata %}{% include "content_labels.html" %}{% endwith %}
     </div>

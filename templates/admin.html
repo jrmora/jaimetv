@@ -33,6 +33,46 @@
         <a class="btn btn-outline-secondary" href="{{ url_for('listing', kind='movies', banned='only', children='all', watched='all') }}">Ver películas bloqueadas</a>
       </div>
       <div id="sync-status" class="mt-3" role="status" aria-live="polite" hidden></div>
+      {% if sync_summary %}
+      {% set change_labels = [('new', 'Nuevos'), ('updated', 'Actualizados'), ('unavailable', 'Ya no disponibles'), ('restored', 'De nuevo disponibles'), ('removed_excluded', 'Retirados por exclusión')] %}
+      {% set field_names = {
+        'name': 'nombre', 'title': 'título', 'year': 'año', 'rating': 'valoración', 'rating_5based': 'valoración',
+        'stream_icon': 'portada', 'cover': 'portada', 'category_id': 'categoría', 'category_ids': 'categorías',
+        'added': 'fecha de incorporación', 'last_modified': 'última modificación', 'releaseDate': 'estreno',
+        'release_date': 'estreno', 'plot': 'sinopsis', 'cast': 'reparto', 'director': 'dirección', 'genre': 'género',
+        'youtube_trailer': 'tráiler', 'container_extension': 'formato', 'episode_run_time': 'duración',
+        'backdrop_path': 'fondo', 'tmdb': 'TMDB', 'direct_source': 'fuente'
+      } %}
+      <div id="sync-summary" class="sync-summary mt-3">
+        <h3 class="h6">Cambios de la última sincronización</h3>
+        {% for catalog_kind in ['movies', 'series'] %}
+        {% set report = sync_summary.report.get(catalog_kind, {}) %}
+        {% set lists = sync_summary.changes.get(catalog_kind, {}) %}
+        <p class="small fw-semibold mb-1 mt-2">{{ labels[catalog_kind] }}</p>
+        {% set ns = namespace(any=false) %}
+        {% for change, label in change_labels %}
+        {% set count = report.get(change, 0) %}
+        {% if count %}
+        {% set ns.any = true %}
+        <details class="sync-change" data-change="{{ catalog_kind }}-{{ change }}">
+          <summary>{{ label }}: {{ count }}</summary>
+          <ul class="small mb-2">
+            {% for item in lists.get(change, []) %}
+            <li>
+              {% if change == 'removed_excluded' %}{{ item.name }}
+              {% else %}<a href="{{ url_for('detail', kind=catalog_kind, id=item.id) }}">{{ item.name }}</a>{% endif %}
+              {% if item.fields %}<span class="text-muted">— {% for field in item.fields %}{{ field_names.get(field, field.replace('_', ' ')) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
+            </li>
+            {% endfor %}
+            {% if count > lists.get(change, [])|length %}<li class="text-muted">y {{ count - lists.get(change, [])|length }} más</li>{% endif %}
+          </ul>
+        </details>
+        {% endif %}
+        {% endfor %}
+        {% if not ns.any %}<p class="small text-muted mb-0">Sin cambios.</p>{% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
   </section>
   <section class="col-12">

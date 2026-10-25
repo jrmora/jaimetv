@@ -2,7 +2,7 @@
 {% if items %}
 <div class="catalog-grid">
   {% for item in items %}
-  <article class="catalog-card border rounded bg-body overflow-hidden">
+  <article class="catalog-card border rounded bg-body overflow-hidden{% if item.unavailable %} is-unavailable{% endif %}">
     <a class="poster-link" href="{{ url_for('detail', kind=kind, id=item.id) }}" aria-label="Ver ficha de {{ item.name }}">
       {% if item.poster_url %}
       <img class="catalog-poster" src="{{ item.poster_url }}" alt="Portada de {{ item.name }}" loading="lazy" referrerpolicy="no-referrer">
@@ -13,6 +13,7 @@
     </a>
     <div class="p-3">
       <h3 class="h6 mb-1"><a class="text-body text-decoration-none" href="{{ url_for('detail', kind=kind, id=item.id) }}">{{ item.name }}</a></h3>
+      {% if item.unavailable %}<p class="mb-1"><span class="badge text-bg-danger" title="El proveedor ya no ofrece este título">Ya no disponible</span></p>{% endif %}
       {% if item.get('version_count', 1) > 1 %}<p class="mb-1"><span class="badge text-bg-secondary">{{ item.version_count }} versiones</span></p>{% endif %}
       {% if item.year %}<p class="small text-muted mb-0">{{ item.year }}</p>{% endif %}
       <div class="d-flex flex-wrap gap-2">

@@ -66,6 +66,12 @@ MOVIE_ERAS = {
     "unknown": ("Sin año conocido", ""),
 }
 SERVICES_PATH = Path(__file__).resolve().with_name("services.json")
+SYNC_CHANGE_LISTS = ("new", "updated", "unavailable", "restored", "removed_excluded")
+SYNC_CHANGE_LIMIT = 500
+TITLE_INDEX_COLUMNS = (
+    "kind", "record_id", "matched", "tmdb_id", "rating", "votes", "year", "people",
+    "search_text", "non_latin", "name_key", "title_key",
+)
 
 
 def fingerprint(data):
@@ -281,7 +287,28 @@ class CatalogStore:
                     PRIMARY KEY (kind, record_id)
                 )
             """)
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS sync_summary (
+                    id INTEGER PRIMARY KEY CHECK (id = 1),
+                    finished_at TEXT NOT NULL,
+                    report TEXT NOT NULL,
+                    changes TEXT NOT NULL
+                )
+            """)
+            # Titles kept locally after the provider stopped listing them; cleared when they reappear.
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS provider_removed (
+                    kind TEXT NOT NULL,
+                    record_id TEXT NOT NULL,
+                    removed_at TEXT NOT NULL,
+                    PRIMARY KEY (kind, record_id)
+                )
+            """)
             # Derived per-title data so listings and searches avoid per-request Python UDF scans.
+            columns = [row[1] for row in db.execute("PRAGMA table_info(title_index)")]
+            if columns and columns != list(TITLE_INDEX_COLUMNS):
+                # Derived data only: an outdated layout is rebuilt below from the catalog.
+                db.execute("DROP TABLE title_index")
             db.execute("""
                 CREATE TABLE IF NOT EXISTS title_index (
                     kind TEXT NOT NULL,
@@ -392,7 +419,9 @@ class CatalogStore:
                     EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.stream_id) AS watched,
                     EXISTS (SELECT 1 FROM banned_movies b WHERE b.record_id=s.stream_id) AS banned,
                     EXISTS (SELECT 1 FROM watchlist saved
-                        WHERE saved.kind='movies' AND saved.record_id=s.stream_id) AS watchlisted
+                        WHERE saved.kind='movies' AND saved.record_id=s.stream_id) AS watchlisted,
+                    EXISTS (SELECT 1 FROM provider_removed r
+                        WHERE r.kind='movies' AND r.record_id=s.stream_id) AS unavailable
                 FROM movies s LEFT JOIN title_index i
                     ON i.kind='movies' AND i.record_id=s.stream_id
             )
@@ -400,7 +429,8 @@ class CatalogStore:
                 COUNT(*) OVER same_movie AS version_count,
                 MAX(watched) OVER same_movie AS watched,
                 MAX(banned) OVER same_movie AS banned,
-                MAX(watchlisted) OVER same_movie AS watchlisted
+                MAX(watchlisted) OVER same_movie AS watchlisted,
+                MIN(unavailable) OVER same_movie AS unavailable
             FROM identities WINDOW same_movie AS (PARTITION BY group_key)
         """)
         db.execute("CREATE UNIQUE INDEX temp.idx_movie_versions_record ON movie_versions(record_id)")
@@ -577,6 +607,8 @@ class CatalogStore:
                 SELECT s.{key} AS id, s.name, s.raw_json, m.payload,
                     EXISTS (SELECT 1 FROM watchlist saved WHERE saved.kind=m.kind
                         AND saved.record_id=s.{key}) AS watchlisted,
+                    EXISTS (SELECT 1 FROM provider_removed r WHERE r.kind=m.kind
+                        AND r.record_id=s.{key}) AS unavailable,
                     json_extract(m.payload, '$.id') AS tmdb_id
                 FROM json_each(?) recommended
                 CROSS JOIN tmdb_metadata m
@@ -597,6 +629,7 @@ class CatalogStore:
             item = {
                 "id": row["id"], "name": row["name"],
                 "watchlisted": bool(row["watchlisted"]),
+                "unavailable": bool(row["unavailable"]),
                 "poster_url": valid_image(raw.get("stream_icon")) or valid_image(raw.get("cover")),
                 "year": release_year(metadata.get("release_date")),
             }
@@ -606,7 +639,7 @@ class CatalogStore:
                     continue
                 item.update(
                     name=grouped["name"], version_count=grouped["version_count"],
-                    watchlisted=grouped["watchlisted"],
+                    watchlisted=grouped["watchlisted"], unavailable=grouped["unavailable"],
                 )
             items.append(item)
             if len(items) == 6:
@@ -659,9 +692,19 @@ class CatalogStore:
             raise CatalogError("La descarga no contiene las cuatro colecciones de películas y series requeridas.")
         # Una única transacción conserva el catálogo anterior si falla cualquier colección.
         duplicates = {}
-        report = {table: dict(new=0, updated=0, unchanged=0, excluded=0, removed_excluded=0) for table in ACTIONS}
+        report = {
+            table: dict(new=0, updated=0, unchanged=0, excluded=0, removed_excluded=0, unavailable=0, restored=0)
+            for table in ACTIONS
+        }
+        changes = {table: {name: [] for name in SYNC_CHANGE_LISTS} for table, _, _ in KINDS.values()}
+
+        def note(table, change, record_id, data, **extra):
+            if table in changes:
+                changes[table][change].append({"id": str(record_id), "name": text(data.get("name")) or str(record_id), **extra})
+
         with self.connect() as db:
             blocked = {}
+            listed = {}
             if incremental:
                 # Resolve exclusions against both saved and incoming categories.
                 for table in CATEGORY_TABLES:
@@ -694,6 +737,7 @@ class CatalogStore:
                         if forbidden:
                             db.execute(f"DELETE FROM {table} WHERE {key}=?", (row[key],))
                             report[table]["removed_excluded"] += 1
+                            note(table, "removed_excluded", row[key], data)
             for table in ACTIONS:
                 if not incremental:
                     db.execute(f"DELETE FROM {table}")
@@ -722,12 +766,20 @@ class CatalogStore:
                             if table not in CATEGORY_TABLES:
                                 removed = db.execute(f"DELETE FROM {table} WHERE {key_name}=?", (row_id,)).rowcount
                                 report[table]["removed_excluded"] += removed
+                                if removed:
+                                    note(table, "removed_excluded", row_id, row)
                             continue
                         old = db.execute(f"SELECT raw_json FROM {table} WHERE {key_name}=?", (row_id,)).fetchone()
-                        if old is not None and json.loads(old[0]) == row:
+                        previous = json.loads(old[0]) if old is not None else None
+                        if previous == row:
                             report[table]["unchanged"] += 1
                             continue
                         report[table]["updated" if old else "new"] += 1
+                        if previous is None:
+                            note(table, "new", row_id, row)
+                        else:
+                            fields = sorted(key for key in previous.keys() | row.keys() if previous.get(key) != row.get(key))
+                            note(table, "updated", row_id, row, fields=fields)
                     if table in CATEGORY_TABLES:
                         db.execute(
                             f"INSERT OR REPLACE INTO {table} VALUES (?, ?, ?, ?)",
@@ -757,10 +809,51 @@ class CatalogStore:
                                 raw,
                             ),
                         )
+                listed[table] = seen
+            now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            for kind, (table, _, key) in KINDS.items():
+                db.execute(
+                    f"DELETE FROM provider_removed WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})", (kind,),
+                )
+                ids = json.dumps(sorted(listed[table]))
+                for row in db.execute(
+                    f"""SELECT r.record_id, s.raw_json FROM provider_removed r JOIN {table} s ON s.{key}=r.record_id
+                        WHERE r.kind=? AND r.record_id IN (SELECT value FROM json_each(?))""",
+                    (kind, ids),
+                ).fetchall():
+                    note(table, "restored", row[0], json.loads(row[1]))
+                report[table]["restored"] = db.execute(
+                    "DELETE FROM provider_removed WHERE kind=? AND record_id IN (SELECT value FROM json_each(?))",
+                    (kind, ids),
+                ).rowcount
+                # An empty download is more likely a provider glitch than a fully withdrawn catalog.
+                if incremental and listed[table]:
+                    for row in db.execute(
+                        f"""SELECT {key}, raw_json FROM {table}
+                            WHERE {key} NOT IN (SELECT value FROM json_each(?))
+                                AND {key} NOT IN (SELECT record_id FROM provider_removed WHERE kind=?)""",
+                        (ids, kind),
+                    ).fetchall():
+                        note(table, "unavailable", row[0], json.loads(row[1]))
+                    report[table]["unavailable"] = db.execute(
+                        f"""INSERT OR IGNORE INTO provider_removed
+                            SELECT ?, {key}, ? FROM {table}
+                            WHERE {key} NOT IN (SELECT value FROM json_each(?))""",
+                        (kind, now, ids),
+                    ).rowcount
             db.execute(
                 "INSERT OR REPLACE INTO sync_metadata VALUES (1, ?)",
-                (datetime.now(timezone.utc).isoformat(timespec="seconds"),),
+                (now,),
             )
+            if incremental:
+                for lists in changes.values():
+                    for change, items in lists.items():
+                        items.sort(key=lambda item: (item["name"].casefold(), item["id"]))
+                        lists[change] = items[:SYNC_CHANGE_LIMIT]
+                db.execute(
+                    "INSERT OR REPLACE INTO sync_summary VALUES (1, ?, ?, ?)",
+                    (now, json.dumps(report), json.dumps(changes, ensure_ascii=False)),
+                )
             self._refresh_title_index(db)
             if incremental:
                 db.execute("DROP TABLE IF EXISTS live_streams")
@@ -769,6 +862,13 @@ class CatalogStore:
         if incremental:
             self.sync_report = report
         return duplicates
+
+    def last_sync_summary(self):
+        with self.connect() as db:
+            row = db.execute("SELECT finished_at, report, changes FROM sync_summary WHERE id=1").fetchone()
+        if row is None:
+            return None
+        return {"finished_at": row[0], "report": json.loads(row[1]), "changes": json.loads(row[2])}
 
     def sync(self, client):
         snapshot = client.download()
@@ -966,6 +1066,10 @@ class CatalogStore:
             identity_projection = f"MIN(s.{key})"
             version_projection = ", versions.version_count AS version_count"
             sort_name = "CASE WHEN versions.version_count>1 THEN COALESCE(NULLIF(idx.title_key, ''), idx.name_key) ELSE idx.name_key END"
+        unavailable_expression = (
+            "versions.unavailable" if kind == "movies"
+            else f"EXISTS (SELECT 1 FROM provider_removed r WHERE r.kind='{kind}' AND r.record_id=s.{key})"
+        )
         if sort_by == "name":
             order = sort_name
         with self.connect() as db:
@@ -1021,7 +1125,8 @@ class CatalogStore:
                            {genre_expression} AS genre, COALESCE(c.category_name, 'Sin categoría') AS category_name,
                            json_extract(s.raw_json, '$.youtube_trailer') AS youtube_trailer,
                            json_extract(s.raw_json, '$.stream_icon') AS preview_icon,
-                           json_extract(s.raw_json, '$.cover') AS preview_cover
+                           json_extract(s.raw_json, '$.cover') AS preview_cover,
+                           {unavailable_expression} AS unavailable
                            {watched_projection}
                            {provider_projection}
                            {version_projection}
@@ -1036,8 +1141,8 @@ class CatalogStore:
         for row in rows:
             item = dict(row)
             item["watchlisted"] = bool(item["watchlisted"])
+            item["unavailable"] = bool(item["unavailable"])
             if kind == "movies":
-                item["watched"] = bool(item["watched"])
                 item["banned"] = bool(item["banned"])
             if my_services == 1:
                 item["matched_services"] = sorted(json.loads(item.pop("matched_services", "[]")), key=str.casefold)
@@ -1071,9 +1176,16 @@ class CatalogStore:
             watchlisted = db.execute(
                 "SELECT 1 FROM watchlist WHERE kind=? AND record_id IN (SELECT value FROM json_each(?))", (kind, ids),
             ).fetchone() is not None
+            removed = {item[0] for item in db.execute(
+                "SELECT record_id FROM provider_removed WHERE kind=? AND record_id IN (SELECT value FROM json_each(?))",
+                (kind, ids),
+            )}
         if row is None:
             return None
-        result = {"name": row["name"], "data": json.loads(row["raw_json"]), "watchlisted": watchlisted}
+        result = {
+            "name": row["name"], "data": json.loads(row["raw_json"]), "watchlisted": watchlisted,
+            "unavailable": bool(removed) and removed >= set(json.loads(ids)),
+        }
         if kind == "movies":
             result["watched"] = watched
             result["banned"] = banned
@@ -1082,7 +1194,7 @@ class CatalogStore:
             for version in versions:
                 raw = json.loads(version["raw_json"])
                 result["versions"].append({
-                    "id": version["id"], "name": version["name"],
+                    "id": version["id"], "name": version["name"], "unavailable": version["id"] in removed,
                     "poster_url": valid_image(raw.get("stream_icon")) or valid_image(raw.get("cover")),
                 })
             if len(versions) > 1:

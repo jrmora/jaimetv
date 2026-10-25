@@ -59,6 +59,10 @@ td { overflow-wrap: anywhere; }
 .trailer-frame iframe { display: block; width: 100%; aspect-ratio: 16 / 9; min-height: 200px; border: 0; }
 .catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(170px, 100%), 1fr)); gap: 1rem; }
 .catalog-card { border-top: 0; }
+.catalog-card.is-unavailable { border: 2px solid var(--bs-danger) !important; }
+.sync-change summary { cursor: pointer; min-height: 32px; }
+.sync-change ul { max-height: 16rem; overflow-y: auto; overflow-wrap: anywhere; }
+.version-posters .is-unavailable .detail-poster { border: 2px solid var(--bs-danger) !important; }
 .poster-link { display: block; text-decoration: none; }
 .catalog-poster, .poster-placeholder { width: 100%; aspect-ratio: 2 / 3; object-fit: contain; background: var(--bs-tertiary-bg); }
 .poster-placeholder { display: flex; align-items: center; justify-content: center; padding: 1rem; color: var(--bs-secondary-color); text-align: center; }

@@ -381,6 +381,7 @@ def create_app(db_path=None):
                 key: datetime.fromisoformat(value).astimezone(ZoneInfo("America/Toronto")).strftime("%Y-%m-%d %H:%M:%S %Z")
                 for key, value in dates.items() if value
             },
+            sync_summary=store.last_sync_summary(),
         )
 
     @app.get("/movies", defaults={"kind": "movies"})
@@ -719,7 +720,8 @@ def main(argv=None):
                 changes = store.sync_report[table]
                 print(f"  {table}: {total} guardados; {changes['new']} nuevos, "
                       f"{changes['updated']} actualizados, {changes['unchanged']} sin cambios, "
-                      f"{changes['excluded']} excluidos, {changes['removed_excluded']} retirados por exclusión")
+                      f"{changes['excluded']} excluidos, {changes['removed_excluded']} retirados por exclusión, "
+                      f"{changes['unavailable']} ya no ofrecidos por el proveedor, {changes['restored']} de nuevo disponibles")
             for table, extra in store.duplicates.items():
                 print(f"Aviso: {table} tenía {extra} IDs repetidos; se conservó el último de cada uno.")
         elif args.command == "stats":

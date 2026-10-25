@@ -73,3 +73,16 @@ class TitleIndexTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TitleIndexMigrationTests(unittest.TestCase):
+    def test_outdated_index_layout_is_rebuilt_on_open(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "catalog.db"
+            store = CatalogStore(path)
+            store.replace(snapshot())
+            with store.connect() as db:
+                db.execute("DROP TABLE title_index")
+                db.execute("CREATE TABLE title_index (kind TEXT, record_id TEXT, search_text TEXT)")
+            reopened = CatalogStore(path)
+            self.assertEqual([item["id"] for item in reopened.query("movies", q="árbol")["items"]], ["11"])

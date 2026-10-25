@@ -2,7 +2,7 @@
 {% macro cards(result, kind, filters) %}
 <div class="catalog-grid">
   {% for item in result['items'] %}
-  <article class="catalog-card border rounded bg-body overflow-hidden">
+  <article class="catalog-card border rounded bg-body overflow-hidden{% if item.unavailable %} is-unavailable{% endif %}">
     <a class="poster-link" href="{{ url_for('detail', kind=kind, id=item.id, **filters) }}" aria-label="Ver ficha de {{ item.name }}">
       {% if item.poster_url %}
       <img class="catalog-poster" src="{{ item.poster_url }}" alt="Portada de {{ item.name }}" loading="lazy" referrerpolicy="no-referrer">
@@ -13,6 +13,9 @@
     </a>
     <div class="p-3">
       <h2 class="h6 mb-2"><a class="text-body text-decoration-none" href="{{ url_for('detail', kind=kind, id=item.id, **filters) }}">{{ item.name }}</a></h2>
+      {% if item.unavailable %}
+      <p class="mb-2"><span class="badge text-bg-danger" title="El proveedor ya no ofrece este título">Ya no disponible</span></p>
+      {% endif %}
       {% if item.get('version_count', 1) > 1 %}
       <p class="mb-2"><span class="badge text-bg-secondary">{{ item.version_count }} versiones</span></p>
       {% endif %}

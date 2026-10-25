@@ -41,7 +41,63 @@ class IncrementalSyncTests(unittest.TestCase):
         self.assertEqual(reopened.detail("movies", "10")["data"]["rating"], "9.5")
         self.sync({table: [] for table in ACTIONS})
         self.assertEqual(self.store.query("movies")["total"], 5)
+        self.assertFalse(any(item["unavailable"] for item in self.store.query("movies")["items"]))
         self.assertEqual(self.store.tmdb_cached("movies", "10", COUNTRY, fingerprint(original)), payload)
+
+    def test_marks_titles_withdrawn_by_provider_and_restores_them(self):
+        from app import create_app
+
+        self.store.set_movie_watched("11", True)
+        changed = copy.deepcopy(self.data)
+        changed["movies"] = [row for row in changed["movies"] if row["stream_id"] != 11]
+        changed["series"] = []
+        self.sync(changed)
+        self.assertEqual(self.store.sync_report["movies"]["unavailable"], 1)
+        self.assertEqual(self.store.sync_report["series"]["unavailable"], 0)
+        items = {item["id"]: item["unavailable"] for item in self.store.query("movies", watched="all")["items"]}
+        self.assertTrue(items.pop("11"))
+        self.assertFalse(any(items.values()))
+        self.assertTrue(self.store.detail("movies", "11")["unavailable"])
+        self.assertTrue(self.store.detail("movies", "11")["watched"])
+        self.assertFalse(self.store.detail("movies", "10")["unavailable"])
+        client = create_app(self.store.path).test_client()
+        page = client.get("/movies?watched=all&children=all").get_data(as_text=True)
+        self.assertEqual(page.count("is-unavailable"), 1)
+        self.assertIn("Ya no disponible", page)
+        self.assertIn("El proveedor ya no ofrece", client.get("/catalog/movies/detail?id=11").get_data(as_text=True))
+
+        self.sync(changed)
+        self.assertEqual(self.store.sync_report["movies"]["unavailable"], 0)
+        self.sync(self.data)
+        self.assertEqual(self.store.sync_report["movies"]["restored"], 1)
+        self.assertFalse(self.store.detail("movies", "11")["unavailable"])
+        self.assertTrue(self.store.detail("movies", "11")["watched"])
+
+    def test_summary_lists_changed_titles_with_fields_and_persists(self):
+        from app import create_app
+
+        self.assertIsNone(self.store.last_sync_summary())
+        changed = copy.deepcopy(self.data)
+        changed["movies"][0]["rating"] = "9.5"
+        changed["movies"] = [row for row in changed["movies"] if row["stream_id"] != 11]
+        changed["movies"].append({"stream_id": 100, "name": "Nueva", "category_id": "1"})
+        self.sync(changed)
+        summary = CatalogStore(self.store.path).last_sync_summary()
+        movies = summary["changes"]["movies"]
+        self.assertEqual(movies["new"], [{"id": "100", "name": "Nueva"}])
+        self.assertEqual(movies["updated"], [{"id": "10", "name": "Batman", "fields": ["rating"]}])
+        self.assertEqual(movies["unavailable"], [{"id": "11", "name": "ÁRBOL"}])
+        self.assertEqual(summary["report"]["movies"]["updated"], 1)
+        page = create_app(self.store.path).test_client().get("/admin").get_data(as_text=True)
+        self.assertIn("Cambios de la última sincronización", page)
+        self.assertIn("Actualizados: 1", page)
+        self.assertIn('href="/catalog/movies/detail?id=10">Batman</a>', page)
+        self.assertIn("— valoración", page)
+        self.assertIn("Ya no disponibles: 1", page)
+        self.sync(self.data)
+        movies = self.store.last_sync_summary()["changes"]["movies"]
+        self.assertEqual(movies["restored"], [{"id": "11", "name": "ÁRBOL"}])
+        self.assertEqual(movies["new"], [])
 
     def test_excludes_categories_primary_secondary_and_existing_records(self):
         changed = copy.deepcopy(self.data)

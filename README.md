@@ -523,6 +523,23 @@ catálogo anterior. Si el proveedor repite un ID, se conserva el último registr
 y excluidos. No se fusionan campos de versiones diferentes: un registro
 cambiado conserva el JSON completo de la última versión del proveedor.
 
+Las películas y series que ya no aparecen en la descarga no se borran (se
+conservan vistas, listas y asociaciones TMDB): se registran en
+`provider_removed` y se muestran con borde rojo y la etiqueta «Ya no
+disponible» en tarjetas, recomendaciones y ficha. Si vuelven a aparecer en una
+sincronización posterior, la marca se retira. Una película agrupada solo se
+marca cuando todas sus versiones han desaparecido; en la ficha se marca cada
+versión retirada. El resumen indica cuántos títulos se marcaron y cuántos
+volvieron a estar disponibles. Una lista vacía no marca nada, por si se trata
+de un fallo temporal del proveedor.
+
+Cada sincronización guarda en `sync_summary` qué películas y series fueron
+nuevas, actualizadas (con los campos que cambiaron), dejaron de estar
+disponibles, volvieron o se retiraron por exclusión (hasta 500 por lista). En
+Administración, «Cambios de la última sincronización» las muestra en listas
+desplegables con enlace a cada ficha; el resumen se conserva aunque se reinicie
+el servidor.
+
 Se excluyen categorías con palabras `ADULTO`, `ADULTOS`, `ADULT`, `XXX`,
 `TERROR` o `HORROR` (sin distinguir mayúsculas ni acentos), así como sus
 contenidos por categoría principal o secundaria. También se retiran registros
