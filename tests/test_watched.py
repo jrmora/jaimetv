@@ -33,6 +33,57 @@ class WatchedMoviesTests(unittest.TestCase):
             headers={"Accept": "application/json"},
         )
 
+    def test_series_watched_shared_versions_persistence_and_search(self):
+        self.data["series"].append({"series_id": 21, "name": "Batman English", "category_id": "1"})
+        self.store.replace(self.data)
+        for record_id in ("20", "21"):
+            raw = self.store.detail("series", record_id)["data"]
+            self.store.save_tmdb("series", record_id, "CA", fingerprint(raw), {
+                "status": "matched", "id": 100, "title": "Batman", "genres": ["Familia"],
+            })
+        url = "/catalog/series/20/watched"
+        response = self.client.post(url, data={"csrf": self.csrf, "watched": "1"},
+                                    headers={"Accept": "application/json"})
+        self.assertEqual(response.json, {"id": "20", "watched": True})
+        reopened = CatalogStore(self.path)
+        for record_id in ("20", "21"):
+            self.assertTrue(reopened.detail("series", record_id)["watched"])
+        self.assertFalse(reopened.detail("movies", "10")["watched"])
+        self.assertEqual(reopened.query("series", watched="unseen")["total"], 0)
+        for endpoint in ("/api/catalog/series?view=cards&children=all", "/api/catalog/series?view=cards&children=only"):
+            self.assertEqual(self.client.get(endpoint).json["total"], 0)
+            found = self.client.get(endpoint + "&q=batman").json
+            self.assertEqual(found["total"], 1)
+            self.assertTrue(found["items"][0]["watched"])
+            self.assertEqual(found["items"][0]["version_count"], 2)
+            self.assertIn('aria-label="Vista"', found["html"])
+        self.assertEqual(self.client.get("/api/catalog/series?watched=all&children=all").json["total"], 1)
+        self.assertEqual(self.client.get("/api/catalog/series?watched=seen&children=all").json["total"], 1)
+        page = self.client.get("/series?watched=seen").get_data(as_text=True)
+        self.assertIn("Series que no he visto", page)
+        self.assertIn('id="watched-seen" value="seen" checked', page)
+        reopened.sync(Mock(download=Mock(return_value=self.data)))
+        self.assertTrue(reopened.detail("series", "21")["watched"])
+        response = self.client.post("/catalog/series/21/watched?watched=seen",
+                                    data={"csrf": self.csrf, "watched": "0"})
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("/catalog/series/detail?", response.location)
+        self.assertEqual(reopened.query("series", watched="seen")["total"], 0)
+        self.assertFalse(reopened.detail("series", "20")["watched"])
+
+    def test_series_watched_rejects_invalid_requests(self):
+        for path, data, status in (
+            ("/catalog/series/20/watched", {"csrf": "bad", "watched": "1"}, 400),
+            ("/catalog/series/20/watched", {"csrf": self.csrf, "watched": "bad"}, 400),
+            ("/catalog/series/missing/watched", {"csrf": self.csrf, "watched": "1"}, 404),
+            ("/catalog/unknown/20/watched", {"csrf": self.csrf, "watched": "1"}, 404),
+        ):
+            self.assertEqual(self.client.post(path, data=data).status_code, status)
+        self.assertEqual(self.client.get("/catalog/series/20/watched").status_code, 405)
+        self.assertFalse(self.store.detail("series", "20")["watched"])
+        with self.assertRaises(ValueError):
+            self.store.set_watched("series", "20", "1")
+
     def test_filter_defaults_toggle_and_persistence(self):
         self.assertEqual(self.store.query("movies", watched="seen")["total"], 0)
         self.assertEqual(self.store.query("movies", watched="unseen")["total"], 4)
@@ -156,8 +207,8 @@ class WatchedMoviesTests(unittest.TestCase):
         self.assertIn("Volver a ver", html)
         for path in ("/series", "/catalog/series/detail?id=20"):
             html = self.client.get(path).get_data(as_text=True)
-            self.assertNotIn('class="watched-form', html)
-            self.assertNotIn('id="watched-seen"', html)
+            self.assertIn('class="watched-form', html)
+            self.assertIn("/catalog/series/20/watched", html)
 
     def test_kids_and_foreign_movies_support_filter(self):
         self.data["vod_categories"].append({"category_id": "3", "category_name": "INFANTIL"})
@@ -185,10 +236,10 @@ class WatchedMoviesTests(unittest.TestCase):
         self.assertEqual(self.client.get("/catalog/movies/10/watched").status_code, 405)
         self.assertFalse(self.store.detail("movies", "10")["watched"])
         for path in ("/movies?watched=bad", "/api/catalog/movies?watched=bad",
-                     "/series?watched=seen"):
+                     "/series?watched=bad"):
             self.assertEqual(self.client.get(path).status_code, 400)
         with self.assertRaises(ValueError):
-            self.store.query("series", watched="seen")
+            self.store.query("series", watched="bad")
         with self.assertRaises(ValueError):
             self.store.set_movie_watched("10", "1")
 

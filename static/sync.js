@@ -22,7 +22,7 @@
       message("Descargando y actualizando el catálogo. Puedes seguir navegando; puede tardar varios minutos.");
       setTimeout(check, 2000);
     } else if (result.status === "completed") {
-      const counts = { new: 0, updated: 0, unchanged: 0, excluded: 0, removed_excluded: 0, unavailable: 0, restored: 0 };
+      const counts = { new: 0, updated: 0, unchanged: 0, excluded: 0, removed_excluded: 0, unavailable: 0, restored: 0, excluded_orphaned: 0, removed_orphaned: 0 };
       for (const changes of Object.values(result.changes)) {
         for (const key of Object.keys(counts)) counts[key] += changes[key] || 0;
       }
@@ -31,6 +31,8 @@
         `${counts.unchanged} sin cambios, ${counts.excluded} excluidos y ${counts.removed_excluded} retirados por exclusión. ` +
         (counts.unavailable ? `${counts.unavailable} ya no los ofrece el proveedor (marcados en rojo). ` : "") +
         (counts.restored ? `${counts.restored} volvieron a estar disponibles. ` : "") +
+        (counts.excluded_orphaned ? `${counts.excluded_orphaned} omitidos por falta de información identificativa. ` : "") +
+        (counts.removed_orphaned ? `${counts.removed_orphaned} registros huérfanos eliminados. ` : "") +
         "El detalle aparece en «Cambios de la última sincronización». " +
         (duplicates ? `Aviso: ${duplicates} IDs repetidos; se conservó la última versión. ` : "") +
         (reloadOnCompletion ? "Actualizando esta página…" : ""));

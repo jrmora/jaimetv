@@ -1,5 +1,5 @@
-{% macro watched_button(record_id, watched, csrf, filters, icon_only=false, responsive=false) %}
-<form class="watched-form mt-2" method="post" action="{{ url_for('movie_watched', record_id=record_id, **filters) }}">
+{% macro watched_button(record_id, watched, csrf, filters, icon_only=false, responsive=false, kind='movies') %}
+<form class="watched-form mt-2" method="post" action="{{ url_for('title_watched', kind=kind, record_id=record_id, **filters) }}">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <input type="hidden" name="watched" value="{{ '0' if watched else '1' }}">
   <button type="submit" class="btn btn-sm {{ 'icon-button' if icon_only else '' }} {{ 'btn-success' if watched else 'btn-outline-secondary' }}" {% if icon_only %}data-icon-only="true"{% endif %} aria-label="{{ 'Vista' if watched else 'Ya la vi' }}" aria-pressed="{{ 'true' if watched else 'false' }}" title="{{ 'Marcar como no vista' if watched else 'Marcar como vista' }}">

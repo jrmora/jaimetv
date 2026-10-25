@@ -66,7 +66,9 @@ MOVIE_ERAS = {
     "unknown": ("Sin año conocido", ""),
 }
 SERVICES_PATH = Path(__file__).resolve().with_name("services.json")
-SYNC_CHANGE_LISTS = ("new", "updated", "unavailable", "restored", "removed_excluded")
+SYNC_CHANGE_LISTS = (
+    "new", "updated", "unavailable", "restored", "removed_excluded", "excluded_orphaned", "removed_orphaned",
+)
 SYNC_CHANGE_LIMIT = 500
 TITLE_INDEX_COLUMNS = (
     "kind", "record_id", "matched", "tmdb_id", "rating", "votes", "year", "people",
@@ -94,6 +96,16 @@ def valid_image(candidate):
     except ValueError:
         valid = False
     return candidate.strip() if valid else None
+
+
+def unidentified_record(data):
+    identifying_fields = (
+        "name", "title", "original_title", "plot", "overview", "description",
+        "cast", "actors", "director", "creators", "tmdb", "tmdb_id", "imdb", "imdb_id", "youtube_trailer",
+    )
+    if any(data.get(field) and str(data[field]).strip() for field in identifying_fields):
+        return False
+    return not any(valid_image(data.get(field)) for field in ("stream_icon", "cover", "backdrop_path"))
 
 
 def non_latin_title(value):
@@ -267,6 +279,12 @@ class CatalogStore:
                 )
             """)
             db.execute("""
+                CREATE TABLE IF NOT EXISTS watched_series (
+                    record_id TEXT PRIMARY KEY,
+                    watched_at TEXT NOT NULL
+                )
+            """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS watched_movies (
                     record_id TEXT PRIMARY KEY,
                     watched_at TEXT NOT NULL
@@ -418,10 +436,7 @@ class CatalogStore:
         table, _, key = KINDS[kind]
         self._refresh_title_index(db, kind)
         started = time.perf_counter()
-        watched = (
-            f"EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.{key})"
-            if kind == "movies" else "0"
-        )
+        watched = f"EXISTS (SELECT 1 FROM watched_{kind} w WHERE w.record_id=s.{key})"
         db.execute(f"""CREATE TEMP TABLE {kind}_versions AS
             WITH identities AS MATERIALIZED (
                 SELECT s.{key} AS record_id, COALESCE(i.matched, 0) AS matched,
@@ -464,9 +479,14 @@ class CatalogStore:
         return True
 
     def set_movie_watched(self, record_id, watched):
+        return self.set_watched("movies", record_id, watched)
+
+    def set_watched(self, kind, record_id, watched):
+        if kind not in KINDS:
+            raise ValueError("Tipo de catálogo inválido.")
         if not isinstance(watched, bool):
             raise ValueError("El estado de vista debe ser booleano.")
-        return self._set_movie_state("watched_movies", record_id, watched)
+        return self._set_title_state(f"watched_{kind}", kind, record_id, watched)
 
     def set_movie_banned(self, record_id, banned):
         return self.set_banned("movies", record_id, banned)
@@ -706,20 +726,43 @@ class CatalogStore:
     def replace(self, snapshot):
         return self._write_snapshot(snapshot)
 
+    def _unidentified_record(self, db, kind, record_id, data):
+        if not unidentified_record(data):
+            return False
+        cached = db.execute("""
+            SELECT 1 FROM tmdb_metadata WHERE kind=? AND record_id=? AND country='CA'
+                AND fingerprint=? AND json_extract(payload, '$.status')='matched'
+                AND json_type(payload, '$.id')='integer' AND json_extract(payload, '$.id')>0
+        """, (kind, record_id, fingerprint(data))).fetchone()
+        return cached is None
+
+    def _delete_title(self, db, kind, record_id):
+        table, _, key = KINDS[kind]
+        db.execute(f"DELETE FROM {table} WHERE {key}=?", (record_id,))
+        for related in ("tmdb_metadata", "watchlist", "provider_removed"):
+            db.execute(f"DELETE FROM {related} WHERE kind=? AND record_id=?", (kind, record_id))
+        for state in ("watched", "banned"):
+            db.execute(f"DELETE FROM {state}_{kind} WHERE record_id=?", (record_id,))
+
     def _write_snapshot(self, snapshot, incremental=False):
         if not set(ACTIONS).issubset(snapshot) or set(snapshot) - set(ACTIONS) - {"live_categories", "live_streams"}:
             raise CatalogError("La descarga no contiene las cuatro colecciones de películas y series requeridas.")
         # Una única transacción conserva el catálogo anterior si falla cualquier colección.
         duplicates = {}
         report = {
-            table: dict(new=0, updated=0, unchanged=0, excluded=0, removed_excluded=0, unavailable=0, restored=0)
+            table: dict(new=0, updated=0, unchanged=0, excluded=0, removed_excluded=0, unavailable=0, restored=0,
+                        excluded_orphaned=0, removed_orphaned=0)
             for table in ACTIONS
         }
         changes = {table: {name: [] for name in SYNC_CHANGE_LISTS} for table, _, _ in KINDS.values()}
 
         def note(table, change, record_id, data, **extra):
             if table in changes:
-                changes[table][change].append({"id": str(record_id), "name": text(data.get("name")) or str(record_id), **extra})
+                changes[table][change].append({
+                    "id": str(record_id),
+                    "name": text(data.get("name")).strip() or text(data.get("title")).strip() or f"Sin título (ID {record_id})",
+                    **extra,
+                })
 
         with self.connect() as db:
             blocked = {}
@@ -777,6 +820,10 @@ class CatalogStore:
                         duplicates[table] = duplicates.get(table, 0) + 1
                     seen.add(row_id)
                     raw = json.dumps(row, ensure_ascii=False, allow_nan=False)
+                    if table in KINDS and self._unidentified_record(db, table, row_id, row):
+                        report[table]["excluded_orphaned"] += 1
+                        note(table, "excluded_orphaned", row_id, row)
+                        continue
                     if incremental:
                         ids = blocked[table if table in CATEGORY_TABLES else category_tables[table]]
                         forbidden = row_id in ids if table in CATEGORY_TABLES else bool(category_memberships(row) & ids)
@@ -831,6 +878,14 @@ class CatalogStore:
                 listed[table] = seen
             now = datetime.now(timezone.utc).isoformat(timespec="seconds")
             for kind, (table, _, key) in KINDS.items():
+                for row in db.execute(f"SELECT {key}, name, raw_json FROM {table}").fetchall():
+                    if row["name"].strip():
+                        continue
+                    data = json.loads(row["raw_json"])
+                    if self._unidentified_record(db, kind, row[key], data):
+                        self._delete_title(db, kind, row[key])
+                        report[table]["removed_orphaned"] += 1
+                        note(table, "removed_orphaned", row[key], data)
                 db.execute(
                     f"DELETE FROM provider_removed WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})", (kind,),
                 )
@@ -935,8 +990,8 @@ class CatalogStore:
             raise ValueError("Tipo de acceso inválido.")
         if my_services not in {0, 1, 2}:
             raise ValueError("Filtro de mis servicios inválido.")
-        if watched not in {"all", "seen", "unseen"} or (kind != "movies" and watched != "all"):
-            raise ValueError("Filtro de películas vistas inválido.")
+        if watched not in {"all", "seen", "unseen"}:
+            raise ValueError("Filtro de títulos vistos inválido.")
         if banned not in {"hide", "only"}:
             raise ValueError("Filtro de películas bloqueadas inválido.")
         if tmdb_status not in TMDB_STATUSES:
@@ -987,9 +1042,7 @@ class CatalogStore:
                 params.append(tmdb_status)
         banned_expression = "versions.banned"
         conditions.append(banned_expression if banned == "only" else f"NOT {banned_expression}")
-        watched_expression = "EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.stream_id)"
-        if kind == "movies":
-            watched_expression = "versions.watched"
+        watched_expression = "versions.watched"
         if watched != "all" and not (watched == "unseen" and q.strip()):
             conditions.append(watched_expression if watched == "seen" else f"NOT {watched_expression}")
         people_metadata = "COALESCE(idx.people, '{}')"
@@ -1066,9 +1119,7 @@ class CatalogStore:
         source += f""" LEFT JOIN title_index idx ON idx.kind='{kind}' AND idx.record_id=s.{key}
             LEFT JOIN tmdb_metadata score ON idx.matched AND score.kind='{kind}'
                 AND score.country='CA' AND score.record_id=s.{key}"""
-        watched_projection = f", {banned_expression} AS banned"
-        if kind == "movies":
-            watched_projection += f", {watched_expression} AS watched"
+        watched_projection = f", {banned_expression} AS banned, {watched_expression} AS watched"
         display_name = "CASE WHEN versions.version_count>1 THEN COALESCE(NULLIF(json_extract(score.payload, '$.title'), ''), s.name) ELSE s.name END"
         sort_name = "CASE WHEN versions.version_count>1 THEN COALESCE(NULLIF(idx.title_key, ''), idx.name_key) ELSE idx.name_key END"
         group_by = " GROUP BY versions.group_key"
@@ -1146,6 +1197,7 @@ class CatalogStore:
             item["watchlisted"] = bool(item["watchlisted"])
             item["unavailable"] = bool(item["unavailable"])
             item["banned"] = bool(item["banned"])
+            item["watched"] = bool(item["watched"])
             if my_services == 1:
                 item["matched_services"] = sorted(json.loads(item.pop("matched_services", "[]")), key=str.casefold)
             item["trailer_url"] = youtube_trailer_url(item.pop("youtube_trailer"))
@@ -1169,8 +1221,8 @@ class CatalogStore:
             ).fetchone()
             versions = self._title_versions(db, kind, record_id) if row else []
             ids = json.dumps([item["id"] for item in versions])
-            watched = kind == "movies" and db.execute(
-                "SELECT 1 FROM watched_movies WHERE record_id IN (SELECT value FROM json_each(?))", (ids,),
+            watched = db.execute(
+                f"SELECT 1 FROM watched_{kind} WHERE record_id IN (SELECT value FROM json_each(?))", (ids,),
             ).fetchone() is not None
             banned_table = "banned_movies" if kind == "movies" else "banned_series"
             banned = db.execute(
@@ -1189,9 +1241,8 @@ class CatalogStore:
             "name": row["name"], "data": json.loads(row["raw_json"]), "watchlisted": watchlisted,
             "unavailable": bool(removed) and removed >= set(json.loads(ids)),
             "banned": banned,
+            "watched": watched,
         }
-        if kind == "movies":
-            result["watched"] = watched
         result["version_count"] = len(versions)
         result["versions"] = []
         for version in versions:

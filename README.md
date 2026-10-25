@@ -268,7 +268,7 @@ pendientes o sin coincidencia), el detalle muestra el bloque colapsable
 reparto, géneros, categorías…), útiles para identificarla. Se oculta al
 confirmar una ficha.
 
-#### Películas vistas
+#### Películas y series vistas
 
 Las películas y series con el mismo ID TMDB confirmado y vigente se presentan como
 **una sola tarjeta**, incluidas copias HD/4K y de distintos idiomas. La tarjeta
@@ -285,7 +285,7 @@ y series únicas de Administración cuentan una vez cada título. La cobertura T
 sigue midiendo registros/versiones del proveedor, porque cada asociación
 necesita comprobarse; el CSV y la sincronización conservan todos los registros.
 
-Las versiones comparten **Quiero ver** y **No me interesa** (y **Vista** en películas).
+Las versiones comparten **Quiero ver**, **No me interesa** y **Vista**.
 Una marca previa en cualquiera de ellas se aplica al grupo; desmarcarla la
 retira de todas las versiones asociadas actualmente. No se borran ni fusionan
 los JSON del proveedor, y una sincronización conserva estas preferencias.
@@ -319,19 +319,19 @@ El bloqueo se guarda por identificador del proveedor en `banned_movies` o `banne
 del estado de vista, los datos originales y TMDB; persiste al reiniciar y
 sincronizar. No elimina títulos ni hace consultas externas.
 
-En las tarjetas y fichas de películas, **Ya la vi** guarda la marca y cambia a
+En las tarjetas y fichas de películas y series, **Ya la vi** guarda la marca y cambia a
 **Vista**; pulsa de nuevo para marcarla como no vista. El filtro **Muéstrame**
-permite mostrar todo, solo películas no vistas o solo vistas, junto con los demás
-filtros. Por defecto se selecciona **Películas que no he visto**; puedes elegir
-**Todo** para incluir también las vistas. Está disponible también en películas infantiles y de otros alfabetos,
-pero no en series.
-Al escribir una búsqueda, **Películas que no he visto** también incluye las vistas,
+permite mostrar todo, solo títulos no vistos o solo vistos, junto con los demás
+filtros. Por defecto se selecciona **Películas que no he visto** o **Series que no he visto**; puedes elegir
+**Todo** para incluir también las vistas. Está disponible también en los catálogos infantiles y de otros alfabetos.
+La marca de una serie se aplica a la serie completa, no a temporadas o episodios.
+Al escribir una búsqueda, el filtro de no vistas también incluye las vistas,
 identificadas con el botón del ojo verde activado. Al borrar la búsqueda vuelve
 a ocultarlas. **Volver a ver** sigue mostrando solo vistas; los demás filtros
-y la exclusión de películas bloqueadas se mantienen.
+y la exclusión de títulos bloqueados se mantienen.
 
-Las marcas se guardan en la tabla `watched_movies` de SQLite, por identificador
-de película del proveedor, separadas de los datos originales y de TMDB.
+Las marcas se guardan en las tablas `watched_movies` y `watched_series` de SQLite, por identificador
+del proveedor, separadas de los datos originales y de TMDB.
 Se conservan al cerrar la aplicación y sincronizar el catálogo; guarda una copia
 de la base de datos para respaldarlas. No se consulta ninguna API al marcar.
 
@@ -541,11 +541,21 @@ Administración, «Cambios de la última sincronización» las muestra en listas
 desplegables con enlace a cada ficha; el resumen se conserva aunque se reinicie
 el servidor.
 
+La sincronización omite registros huérfanos: sin nombre ni título, sin portada
+HTTP(S), sin sinopsis, créditos o identificador externo y sin asociación TMDB
+confirmada y vigente. La categoría, año o valoración por sí solos no bastan
+para identificarlos. También elimina los huérfanos que ya estaban guardados,
+junto con sus cachés y preferencias, y los detalla en el resumen como
+«Omitidos sin información identificativa» o «Huérfanos eliminados».
+Si una descarga incompleta afecta a un título previamente identificable,
+se conserva el registro anterior. No se eliminan títulos solo por no tener TMDB.
+
 Se excluyen categorías con palabras `ADULTO`, `ADULTOS`, `ADULT`, `XXX`,
 `TERROR` o `HORROR` (sin distinguir mayúsculas ni acentos), así como sus
 contenidos por categoría principal o secundaria. También se retiran registros
-locales que pertenezcan a esas categorías si aún existen: es la única
-eliminación automática, incluso si el proveedor cambia la categoría de un ID.
+locales que pertenezcan a esas categorías si aún existen, incluso si el proveedor
+cambia la categoría de un ID. Junto con la limpieza de huérfanos descrita arriba,
+son los casos de eliminación automática.
 Los IDs de exclusión se obtienen de las categorías descargadas y las locales,
 no están fijados a los números de un proveedor. Se recuerdan en
 `sync_excluded_categories` para no reintroducir contenido si en una descarga
@@ -731,7 +741,7 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
 - Las categorías de la ficha son enlaces al listado del mismo tipo de contenido,
   sin otros filtros previos. Incluyen coincidencias por categoría principal o por
   cualquiera de las secundarias de `category_ids`, sin duplicar los resultados.
-- «Otros alfabetos» separa películas y series cuyo nombre contiene alguna letra
+- «Otros alfabetos», accesible desde Administración → Catálogo IPTV, separa películas y series cuyo nombre contiene alguna letra
   no latina (por ejemplo, cirílico, hangul, tailandés, chino, japonés, árabe o griego).
   Los títulos en escritura latina, incluidos español, inglés, francés, portugués e
   italiano, permanecen en sus listados habituales. Acentos, cifras y símbolos no

@@ -32,10 +32,11 @@
                 data-endpoint="{{ url_for('catalog_sync') }}" data-csrf="{{ sync_csrf }}" hidden>Sincronizar catálogo</button>
         <a class="btn btn-outline-secondary" href="{{ url_for('listing', kind='movies', banned='only', children='all', watched='all') }}">Ver películas bloqueadas</a>
         <a class="btn btn-outline-secondary" href="{{ url_for('listing', kind='series', banned='only', children='all') }}">Ver series bloqueadas</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('listing', kind='movies', foreign=1) }}">Otros alfabetos</a>
       </div>
       <div id="sync-status" class="mt-3" role="status" aria-live="polite" hidden></div>
       {% if sync_summary %}
-      {% set change_labels = [('new', 'Nuevos'), ('updated', 'Actualizados'), ('unavailable', 'Ya no disponibles'), ('restored', 'De nuevo disponibles'), ('removed_excluded', 'Retirados por exclusión')] %}
+      {% set change_labels = [('new', 'Nuevos'), ('updated', 'Actualizados'), ('unavailable', 'Ya no disponibles'), ('restored', 'De nuevo disponibles'), ('removed_excluded', 'Retirados por exclusión'), ('excluded_orphaned', 'Omitidos sin información identificativa'), ('removed_orphaned', 'Huérfanos eliminados')] %}
       {% set field_names = {
         'name': 'nombre', 'title': 'título', 'year': 'año', 'rating': 'valoración', 'rating_5based': 'valoración',
         'stream_icon': 'portada', 'cover': 'portada', 'category_id': 'categoría', 'category_ids': 'categorías',
@@ -60,7 +61,7 @@
           <ul class="small mb-2">
             {% for item in lists.get(change, []) %}
             <li>
-              {% if change == 'removed_excluded' %}{{ item.name }}
+              {% if change in ['removed_excluded', 'excluded_orphaned', 'removed_orphaned'] %}{{ item.name }}
               {% else %}<a href="{{ url_for('detail', kind=catalog_kind, id=item.id) }}">{{ item.name }}</a>{% endif %}
               {% if item.fields %}<span class="text-muted">— {% for field in item.fields %}{{ field_names.get(field, field.replace('_', ' ')) }}{% if not loop.last %}, {% endif %}{% endfor %}</span>{% endif %}
             </li>

@@ -19,7 +19,6 @@
         {% endfor %}
         <a class="nav-link text-body {% if active == 'kids' %}fw-bold{% endif %}" {% if active == 'kids' %}aria-current="page"{% endif %} href="{{ url_for('kids_listing', kind='movies') }}">Niños</a>
         <a class="nav-link text-body" href="{{ url_for('listing', kind='movies', watchlist=1, children='all', watched='all') }}">Mi lista</a>
-        <a class="nav-link text-body {% if active == 'foreign' %}fw-bold{% endif %}" {% if active == 'foreign' %}aria-current="page"{% endif %} href="{{ url_for('listing', kind='movies', foreign=1) }}" aria-label="Otros alfabetos" title="Otros alfabetos"><span aria-hidden="true">文 · Я · ع</span></a>
         <a class="nav-link text-body {% if active == 'admin' %}fw-bold{% endif %}" href="{{ url_for('administration') }}" {% if active == 'admin' %}aria-current="page"{% endif %}>Administración</a>
       </div>
       {% endif %}

@@ -27,9 +27,7 @@
       <p class="small text-muted mb-1">{{ item.votes }} votos{% if item.votes < 100 %} · Pocos votos{% endif %}</p>
       {% endif %}
       <div class="d-flex flex-wrap gap-2">
-      {% if kind == 'movies' %}
-      {{ watched_button(item.id, item.watched, sync_csrf, filters, icon_only=true) }}
-      {% endif %}
+      {{ watched_button(item.id, item.watched, sync_csrf, filters, icon_only=true, kind=kind) }}
       {{ banned_button(item.id, item.banned, sync_csrf, filters, icon_only=true, kind=kind) }}
       {{ watchlist_button(kind, item.id, item.watchlisted, sync_csrf) }}
       </div>

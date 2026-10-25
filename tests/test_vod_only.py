@@ -32,7 +32,11 @@ class VODOnlyTests(unittest.TestCase):
             self.assertNotIn(b"/channels", page.data)
             self.assertNotIn(b"Canales", page.data)
             self.assertIn(b"/kids/movies", page.data)
-            self.assertIn(b"/movies?foreign=1", page.data)
+            if route == "/admin":
+                self.assertIn(b"/movies?foreign=1", page.data)
+                self.assertIn(b">Otros alfabetos</a>", page.data)
+            else:
+                self.assertNotIn(b"/movies?foreign=1", page.data)
 
     def test_download_only_requests_movies_and_series(self):
         client = XtreamClient("https://example.invalid", "user", "password")

@@ -267,12 +267,12 @@ def create_app(db_path=None):
         tmdb_status = request.args.get("tmdb_status", "all")
         if tmdb_status not in TMDB_STATUSES:
             abort(400, description="Estado TMDB inválido.")
-        watched = request.args.get("watched", "unseen" if kind == "movies" else "all")
+        watched = request.args.get("watched", "unseen" if kind in KINDS else "all")
         banned = request.args.get("banned", "hide")
         if banned not in {"hide", "only"}:
             abort(400, description="Filtro de títulos bloqueados inválido.")
-        if watched not in {"all", "seen", "unseen"} or (kind not in {None, "movies"} and watched != "all"):
-            abort(400, description="Filtro de películas vistas inválido.")
+        if watched not in {"all", "seen", "unseen"}:
+            abort(400, description="Filtro de títulos vistos inválido.")
         if len(categories) > 100 or len(genres) > 100 or any(len(value) > 200 for value in categories + genres):
             abort(400, description="Selecciona hasta 100 categorías y géneros de hasta 200 caracteres.")
         if children == "exclude" and request.endpoint in {"listing", "catalog_api"}:
@@ -296,7 +296,7 @@ def create_app(db_path=None):
         # Preserve the API's default response and existing unfiltered URL shapes.
         if providers or mine != "0" or "access" in request.args:
             values.update(provider=ordered_platforms(providers), my_services=int(mine), access=access)
-        if kind == "movies" or "watched" in request.args:
+        if kind in KINDS or "watched" in request.args:
             values["watched"] = watched
         if "banned" in request.args:
             values["banned"] = banned
@@ -339,18 +339,21 @@ def create_app(db_path=None):
             return jsonify(id=record_id, banned=value == "1")
         return redirect(url_for("detail", kind=kind, id=record_id, **filters), code=303)
 
-    @app.post("/catalog/movies/<record_id>/watched")
-    def movie_watched(record_id):
+    @app.post("/catalog/movies/<record_id>/watched", defaults={"kind": "movies"})
+    @app.post("/catalog/series/<record_id>/watched", defaults={"kind": "series"})
+    def title_watched(kind, record_id):
+        if kind not in KINDS:
+            abort(404)
         check_sync_csrf()
         value = request.form.get("watched")
         if value not in {"0", "1"}:
-            abort(400, description="Estado de película vista inválido.")
+            abort(400, description="Estado de título visto inválido.")
         filters = parameters()
-        if not store.set_movie_watched(record_id, value == "1"):
-            abort(404, description="La película no existe en el catálogo local.")
+        if not store.set_watched(kind, record_id, value == "1"):
+            abort(404, description="El título no existe en el catálogo local.")
         if request.accept_mimetypes.best == "application/json":
             return jsonify(id=record_id, watched=value == "1")
-        return redirect(url_for("detail", kind="movies", id=record_id, **filters), code=303)
+        return redirect(url_for("detail", kind=kind, id=record_id, **filters), code=303)
 
     @app.get("/")
     def index():
@@ -724,7 +727,8 @@ def main(argv=None):
                 print(f"  {table}: {total} guardados; {changes['new']} nuevos, "
                       f"{changes['updated']} actualizados, {changes['unchanged']} sin cambios, "
                       f"{changes['excluded']} excluidos, {changes['removed_excluded']} retirados por exclusión, "
-                      f"{changes['unavailable']} ya no ofrecidos por el proveedor, {changes['restored']} de nuevo disponibles")
+                      f"{changes['unavailable']} ya no ofrecidos por el proveedor, {changes['restored']} de nuevo disponibles, "
+                      f"{changes['excluded_orphaned']} omitidos sin información, {changes['removed_orphaned']} huérfanos eliminados")
             for table, extra in store.duplicates.items():
                 print(f"Aviso: {table} tenía {extra} IDs repetidos; se conservó el último de cada uno.")
         elif args.command == "stats":
