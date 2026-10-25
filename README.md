@@ -197,12 +197,16 @@ el tiempo dentro de conexiones SQLite (`sqlite`), el cierre de
 transacciones (`commit`, incluida reversión en caso de error), y las fases de consulta `rating_mean`, `count`
 y `select_rows`. `prepare_versions` mide la identificación de versiones de
 películas y sus preferencias compartidas en una tabla temporal compacta.
-`prepare_metadata` mide la preparación de metadatos cuando
-hay búsqueda u orden por valoración: una tabla temporal privada de la conexión
-reutiliza identidad, valoración, año y personas entre las fases de consulta.
-Se elimina al cerrar la conexión, sin modificar el catálogo ni mantener una
-caché que pueda quedar desactualizada. Las consultas alfabéticas sin búsqueda
-y las listas personales conservan la ruta directa para evitar ese coste.
+`refresh_index` mide la comprobación del índice de títulos `title_index`:
+guarda por título si está enlazado a TMDB, su ID, valoración, votos, año,
+personas y un texto de búsqueda normalizado (título del proveedor, títulos
+TMDB, reparto, dirección y creadores). Así buscar y ordenar no recalculan
+identidades ni personas de todo el catálogo en cada petición. Triggers SQLite
+invalidan las filas al cambiar una película, serie o ficha TMDB, y se
+regeneran en la misma transacción, de modo que el índice nunca queda
+desactualizado; la primera vez se construye al iniciar la aplicación.
+Mientras llega el resultado, el botón **Buscar** muestra un indicador de carga
+y las tarjetas actuales se atenúan.
 Las recomendaciones usan un índice por ID TMDB antes de validar las identidades
 de los títulos candidatos, en vez de revisar todo el catálogo.
 Cuando se consulta TMDB también aparecen `tmdb_wait`

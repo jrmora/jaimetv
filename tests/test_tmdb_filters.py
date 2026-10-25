@@ -119,7 +119,7 @@ class TMDBFilterTests(unittest.TestCase):
         self.assertEqual(result["total"], 0)
         self.assertLessEqual(len(calls), 12)
 
-    def test_rating_search_prepares_each_identity_and_people_only_once(self):
+    def test_rating_search_reuses_title_index_without_recomputing_identity_or_people(self):
         for record_id in ("10", "11", "12"):
             self.cache(record_id=record_id)
         original_connect = self.store.connect
@@ -143,8 +143,7 @@ class TMDBFilterTests(unittest.TestCase):
         with patch.object(self.store, "connect", counted_connect):
             result = self.store.query("movies", q="Actor TMDB", sort_by="rating", page=1)
         self.assertEqual(result["total"], 3)
-        self.assertEqual(len(identities), 3)
-        self.assertEqual(len(people), 3)
+        self.assertEqual((len(identities), len(people)), (0, 0))
         self.assertIs(type(result["items"][0]["votes"]), int)
 
     def test_rating_order_weights_votes_without_changing_displayed_score(self):

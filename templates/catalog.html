@@ -18,8 +18,9 @@
   <label for="q" class="visually-hidden">Buscar títulos, actores o directores</label>
   <div class="input-group input-group-lg">
     <input id="q" name="q" form="filters" type="search" class="form-control" maxlength="200" value="{{ filters.q }}" placeholder="Busca un título, actor o director…" autocomplete="off">
-    <button class="btn btn-primary" type="submit" form="filters">Buscar</button>
+    <button class="btn btn-primary search-button" type="submit" form="filters"><span id="search-spinner" class="spinner-border spinner-border-sm" aria-hidden="true" hidden></span><span>Buscar</span></button>
   </div>
+  <p id="search-status" class="visually-hidden" role="status" aria-live="polite"></p>
 </div>
 {% if kids %}
 <div class="d-flex gap-3 mb-3">

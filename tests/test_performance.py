@@ -24,7 +24,7 @@ class PerformanceTests(unittest.TestCase):
             response = self.client.get("/api/catalog/movies?view=cards&q=private-search-text")
         self.assertEqual(response.status_code, 200)
         timings = response.headers["Server-Timing"]
-        for phase in ("prepare_metadata", "rating_mean", "count", "select_rows", "commit", "sqlite", "total"):
+        for phase in ("refresh_index", "prepare_versions", "rating_mean", "count", "select_rows", "commit", "sqlite", "total"):
             self.assertRegex(timings, rf"(?:^|, ){phase};dur=\d+\.\d")
         request_id = response.headers["X-Request-ID"]
         self.assertRegex(request_id, r"^[0-9a-f]{16}$")
@@ -45,7 +45,7 @@ class PerformanceTests(unittest.TestCase):
     def test_sum_of_query_phases_does_not_exceed_sqlite_duration(self):
         response = self.client.get("/api/catalog/movies?view=cards")
         timings = {name: float(value) for name, value in re.findall(r"(\w+);dur=([\d.]+)", response.headers["Server-Timing"])}
-        self.assertLessEqual(sum(timings[name] for name in ("prepare_metadata", "rating_mean", "count", "select_rows")), timings["sqlite"] + 0.4)
+        self.assertLessEqual(sum(timings[name] for name in ("refresh_index", "prepare_versions", "rating_mean", "count", "select_rows")), timings["sqlite"] + 0.4)
 
     def test_tmdb_wait_and_http_timings_include_failed_requests(self):
         config = Path(self.temp.name) / "tmdb.json"

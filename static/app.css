@@ -62,7 +62,8 @@ td { overflow-wrap: anywhere; }
 .poster-link { display: block; text-decoration: none; }
 .catalog-poster, .poster-placeholder { width: 100%; aspect-ratio: 2 / 3; object-fit: contain; background: var(--bs-tertiary-bg); }
 .poster-placeholder { display: flex; align-items: center; justify-content: center; padding: 1rem; color: var(--bs-secondary-color); text-align: center; }
-#card-results[aria-busy="true"] { opacity: 0.55; }
+#card-results[aria-busy="true"] { opacity: 0.55; transition: opacity 0.15s ease-in; }
+.search-button { display: inline-flex; align-items: center; gap: 0.5rem; }
 .catalog-layout { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 1.5rem; align-items: start; }
 .catalog-sidebar, .catalog-content { min-width: 0; }
 .catalog-search { max-width: 960px; }

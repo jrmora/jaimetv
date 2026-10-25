@@ -122,6 +122,25 @@ def effective_people(raw, payload):
     }, ensure_ascii=False)
 
 
+def search_text(name, payload, people):
+    tmdb = json.loads(payload) if payload else {}
+    names = json.loads(people) if people else {}
+    parts = [
+        name, tmdb.get("title"), tmdb.get("original_title"),
+        *(person for field in ("cast", "director", "creators") for person in names.get(field, [])),
+    ]
+    return "\n".join(text(part).casefold() for part in parts if part)
+
+
+def valid_rating_sql(payload):
+    return f"""CASE WHEN
+            json_type({payload}, '$.rating') IN ('integer', 'real')
+            AND json_extract({payload}, '$.rating') BETWEEN 0 AND 10
+            AND json_type({payload}, '$.votes') IN ('integer', 'real')
+            AND json_extract({payload}, '$.votes') > 0
+            THEN json_extract({payload}, '$.rating') END"""
+
+
 def text(value):
     return "" if value is None else str(value)
 
@@ -262,6 +281,77 @@ class CatalogStore:
                     PRIMARY KEY (kind, record_id)
                 )
             """)
+            # Derived per-title data so listings and searches avoid per-request Python UDF scans.
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS title_index (
+                    kind TEXT NOT NULL,
+                    record_id TEXT NOT NULL,
+                    matched INTEGER NOT NULL,
+                    tmdb_id INTEGER,
+                    rating,
+                    votes,
+                    year INTEGER,
+                    people TEXT,
+                    search_text TEXT NOT NULL,
+                    non_latin INTEGER NOT NULL,
+                    name_key TEXT NOT NULL,
+                    title_key TEXT NOT NULL,
+                    PRIMARY KEY (kind, record_id)
+                )
+            """)
+            # Plain SQL triggers invalidate rows in the writer's transaction; writers refresh before committing.
+            for kind, (table, _, key) in KINDS.items():
+                for event, rows in (("INSERT", ("NEW",)), ("UPDATE", ("OLD", "NEW")), ("DELETE", ("OLD",))):
+                    targets = " OR ".join(f"record_id={row}.{key}" for row in rows)
+                    db.execute(f"""
+                        CREATE TRIGGER IF NOT EXISTS title_index_{table}_{event.lower()}
+                        AFTER {event} ON {table} BEGIN
+                            DELETE FROM title_index WHERE kind='{kind}' AND ({targets});
+                        END
+                    """)
+            for event, rows in (("INSERT", ("NEW",)), ("UPDATE", ("OLD", "NEW")), ("DELETE", ("OLD",))):
+                targets = " OR ".join(f"(kind={row}.kind AND record_id={row}.record_id)" for row in rows)
+                db.execute(f"""
+                    CREATE TRIGGER IF NOT EXISTS title_index_tmdb_{event.lower()}
+                    AFTER {event} ON tmdb_metadata BEGIN
+                        DELETE FROM title_index WHERE {targets};
+                    END
+                """)
+            self._refresh_title_index(db)
+
+    def _refresh_title_index(self, db, kinds=tuple(KINDS)):
+        started = time.perf_counter()
+        for kind in ([kinds] if isinstance(kinds, str) else kinds):
+            table, _, key = KINDS[kind]
+            missing = f"""SELECT 1 FROM {table} s WHERE NOT EXISTS (
+                SELECT 1 FROM title_index i WHERE i.kind=? AND i.record_id=s.{key})"""
+            # Read-only check first, so normal readers never wait for the writer lock.
+            if db.execute(f"{missing} LIMIT 1", (kind,)).fetchone() is None:
+                continue
+            db.execute(f"""
+                WITH missing AS MATERIALIZED (
+                    SELECT s.{key} AS record_id, s.name, s.raw_json FROM {table} s
+                    WHERE NOT EXISTS (SELECT 1 FROM title_index i WHERE i.kind=? AND i.record_id=s.{key})
+                ), resolved AS MATERIALIZED (
+                    SELECT missing.record_id, missing.name, m.payload, NON_LATIN_TITLE(missing.name) AS non_latin,
+                        CASE WHEN m.payload IS NOT NULL THEN PEOPLE_METADATA(NULL, m.payload) END AS people
+                    FROM missing LEFT JOIN tmdb_metadata m
+                        ON m.kind=? AND m.country='CA' AND m.record_id=missing.record_id
+                        AND m.fingerprint=TITLE_FINGERPRINT(missing.raw_json)
+                        AND json_extract(m.payload, '$.status')='matched'
+                )
+                INSERT OR REPLACE INTO title_index
+                SELECT ?, record_id, payload IS NOT NULL,
+                    CASE WHEN json_type(payload, '$.id')='integer' AND json_extract(payload, '$.id')>0
+                        THEN json_extract(payload, '$.id') END,
+                    {valid_rating_sql('payload')},
+                    CASE WHEN ({valid_rating_sql('payload')}) IS NOT NULL THEN json_extract(payload, '$.votes') END,
+                    RELEASE_YEAR(json_extract(payload, '$.release_date')), people,
+                    SEARCH_TEXT(name, payload, people), non_latin,
+                    CASEFOLD(name), CASEFOLD(json_extract(payload, '$.title'))
+                FROM resolved
+            """, (kind, kind, kind))
+        record_timing("refresh_index", started)
 
     def _movie_versions(self, db, record_id):
         row = db.execute("""
@@ -291,22 +381,20 @@ class CatalogStore:
         return [dict(item) for item in rows]
 
     def _prepare_movie_versions(self, db):
+        self._refresh_title_index(db, "movies")
         started = time.perf_counter()
         db.execute("""CREATE TEMP TABLE movie_versions AS
             WITH identities AS MATERIALIZED (
-                SELECT s.stream_id AS record_id, m.record_id IS NOT NULL AS matched,
-                    CASE WHEN json_type(m.payload, '$.id')='integer'
-                        AND json_extract(m.payload, '$.id')>0
-                        THEN 'tmdb:' || json_extract(m.payload, '$.id')
+                SELECT s.stream_id AS record_id, COALESCE(i.matched, 0) AS matched,
+                    CASE WHEN i.tmdb_id IS NOT NULL
+                        THEN 'tmdb:' || i.tmdb_id
                         ELSE 'record:' || s.stream_id END AS group_key,
                     EXISTS (SELECT 1 FROM watched_movies w WHERE w.record_id=s.stream_id) AS watched,
                     EXISTS (SELECT 1 FROM banned_movies b WHERE b.record_id=s.stream_id) AS banned,
                     EXISTS (SELECT 1 FROM watchlist saved
                         WHERE saved.kind='movies' AND saved.record_id=s.stream_id) AS watchlisted
-                FROM movies s LEFT JOIN tmdb_metadata m
-                    ON m.kind='movies' AND m.country='CA' AND m.record_id=s.stream_id
-                    AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                    AND json_extract(m.payload, '$.status')='matched'
+                FROM movies s LEFT JOIN title_index i
+                    ON i.kind='movies' AND i.record_id=s.stream_id
             )
             SELECT record_id, matched, group_key,
                 COUNT(*) OVER same_movie AS version_count,
@@ -452,6 +540,8 @@ class CatalogStore:
                 "INSERT OR REPLACE INTO tmdb_metadata VALUES (?, ?, ?, ?, ?)",
                 (kind, record_id, country, fingerprint, json.dumps(payload, ensure_ascii=False)),
             )
+            if kind in KINDS:
+                self._refresh_title_index(db, kind)
 
     def cached_recommendations(self, kind, tmdb_id, since):
         with self.connect() as db:
@@ -534,6 +624,7 @@ class CatalogStore:
         db.create_function("PLATFORM_NAME", 1, platform_name, deterministic=True)
         db.create_function("RELEASE_YEAR", 1, release_year, deterministic=True)
         db.create_function("PEOPLE_METADATA", 2, effective_people, deterministic=True)
+        db.create_function("SEARCH_TEXT", 3, search_text, deterministic=True)
         db.create_function(
             "HAS_GENRE", 2,
             lambda value, genre: genre.casefold() in {name.casefold() for name in people_names(value)},
@@ -670,6 +761,7 @@ class CatalogStore:
                 "INSERT OR REPLACE INTO sync_metadata VALUES (1, ?)",
                 (datetime.now(timezone.utc).isoformat(timespec="seconds"),),
             )
+            self._refresh_title_index(db)
             if incremental:
                 db.execute("DROP TABLE IF EXISTS live_streams")
                 db.execute("DROP TABLE IF EXISTS live_categories")
@@ -733,20 +825,13 @@ class CatalogStore:
         eras = era if isinstance(era, list) else ([era] if era else [])
         if any(value not in MOVIE_ERAS for value in eras) or (eras and kind != "movies"):
             raise ValueError("Época de películas inválida.")
-        valid_rating = """CASE WHEN
-            json_type(score.payload, '$.rating') IN ('integer', 'real')
-            AND json_extract(score.payload, '$.rating') BETWEEN 0 AND 10
-            AND json_type(score.payload, '$.votes') IN ('integer', 'real')
-            AND json_extract(score.payload, '$.votes') > 0
-            THEN json_extract(score.payload, '$.rating') END"""
-        materialize_metadata = not watchlist and (sort_by == "rating" or any((q, actor, director, person)))
-        tmdb_rating = "score.rating" if materialize_metadata else valid_rating
-        votes = "score.votes" if materialize_metadata else f"CASE WHEN ({valid_rating}) IS NOT NULL THEN json_extract(score.payload, '$.votes') END"
+        tmdb_rating = "idx.rating"
+        votes = "idx.votes"
         order = (
             f"(({tmdb_rating}) * ({votes}) + 100.0 * ?) / (({votes}) + 100.0)"
             if sort_by == "rating" else SORT_COLUMNS[sort_by]
         )
-        year = "score.year" if materialize_metadata else "RELEASE_YEAR(json_extract(score.payload, '$.release_date'))"
+        year = "idx.year"
         genre_expression = "(SELECT group_concat(value, ', ') FROM json_each(score.payload, '$.genres'))"
         if sort_by == "year":
             order = year
@@ -793,18 +878,11 @@ class CatalogStore:
             watched_expression = "versions.watched"
         if watched != "all" and not (watched == "unseen" and q.strip()):
             conditions.append(watched_expression if watched == "seen" else f"NOT {watched_expression}")
-        people_metadata = "COALESCE(score.people, '{}')" if materialize_metadata else "PEOPLE_METADATA(NULL, score.payload)"
+        people_metadata = "COALESCE(idx.people, '{}')"
         if q:
             escaped = q.casefold().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-            expressions = (
-                "s.name", "json_extract(score.payload, '$.title')",
-                "json_extract(score.payload, '$.original_title')",
-                f"json_extract({people_metadata}, '$.cast')",
-                f"json_extract({people_metadata}, '$.director')",
-                f"json_extract({people_metadata}, '$.creators')",
-            )
-            conditions.append("(" + " OR ".join(f"CASEFOLD({expression}) LIKE ? ESCAPE '\\'" for expression in expressions) + ")")
-            params.extend([f"%{escaped}%"] * len(expressions))
+            conditions.append("idx.search_text LIKE ? ESCAPE '\\'")
+            params.append(f"%{escaped}%")
         for value, expression in (
             (actor, f"json_extract({people_metadata}, '$.cast')"),
             (director, f"json_extract({people_metadata}, '$.director')"),
@@ -820,7 +898,7 @@ class CatalogStore:
             )"""
             conditions.insert(0, membership if children == "only" else f"NOT {membership}")
         if foreign is not None and children != "only" and kind in {"movies", "series"}:
-            conditions.append("NON_LATIN_TITLE(s.name) = ?")
+            conditions.append("idx.non_latin = ?")
             params.append(int(bool(foreign)))
         if person:
             conditions.append(f"HAS_PERSON({people_metadata}, ?) = 1")
@@ -872,17 +950,12 @@ class CatalogStore:
         source = f"{table} s LEFT JOIN {categories} c ON c.category_id = s.category_id"
         if kind == "movies":
             source += " JOIN movie_versions versions ON versions.record_id=s.stream_id"
-        if materialize_metadata:
-            source += f" LEFT JOIN query_metadata score ON score.record_id=s.{key}"
-        else:
-            source += (""" LEFT JOIN tmdb_metadata score
-                ON score.kind='movies' AND score.country='CA'
-                AND score.record_id=s.stream_id AND versions.matched""" if kind == "movies" else f""" LEFT JOIN tmdb_metadata score
-                ON score.kind='{kind}' AND score.record_id=s.{key} AND score.country='CA'
-                AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                AND json_extract(score.payload, '$.status')='matched'""")
+        source += f""" LEFT JOIN title_index idx ON idx.kind='{kind}' AND idx.record_id=s.{key}
+            LEFT JOIN tmdb_metadata score ON idx.matched AND score.kind='{kind}'
+                AND score.country='CA' AND score.record_id=s.{key}"""
         watched_projection = f", {watched_expression} AS watched, {banned_expression} AS banned" if kind == "movies" else ""
         display_name = "s.name"
+        sort_name = "idx.name_key"
         group_by = ""
         identity_projection = f"s.{key}"
         version_projection = ""
@@ -892,38 +965,14 @@ class CatalogStore:
             # SQLite takes bare columns from the row supplying this single MIN.
             identity_projection = f"MIN(s.{key})"
             version_projection = ", versions.version_count AS version_count"
-            if sort_by == "name":
-                order = f"CASEFOLD({display_name})"
+            sort_name = "CASE WHEN versions.version_count>1 THEN COALESCE(NULLIF(idx.title_key, ''), idx.name_key) ELSE idx.name_key END"
+        if sort_by == "name":
+            order = sort_name
         with self.connect() as db:
             if kind == "movies":
                 self._prepare_movie_versions(db)
-            if materialize_metadata:
-                started = time.perf_counter()
-                db.execute("""CREATE TEMP TABLE query_metadata (
-                    record_id TEXT PRIMARY KEY, payload TEXT, rating,
-                    votes, year INTEGER, people TEXT
-                )""")
-                people = "PEOPLE_METADATA(NULL, score.payload)" if q or actor or director or person else "NULL"
-                if children != "all":
-                    people_condition = membership if children == "only" else f"NOT {membership}"
-                    people = f"CASE WHEN {people_condition} THEN {people} END"
-                metadata_source = (
-                    """movie_versions v JOIN tmdb_metadata score
-                        ON score.kind='movies' AND score.country='CA'
-                        AND score.record_id=v.record_id""" if kind == "movies" else
-                    f"tmdb_metadata score JOIN {table} s ON s.{key}=score.record_id"
-                )
-                metadata_condition = (
-                    "v.matched" if kind == "movies" else
-                    "score.kind=? AND score.country='CA' AND score.fingerprint=TITLE_FINGERPRINT(s.raw_json) AND json_extract(score.payload, '$.status')='matched'"
-                )
-                db.execute(f"""INSERT INTO query_metadata
-                    SELECT score.record_id, score.payload, {valid_rating},
-                        CASE WHEN ({valid_rating}) IS NOT NULL THEN json_extract(score.payload, '$.votes') END,
-                        RELEASE_YEAR(json_extract(score.payload, '$.release_date')), {people}
-                    FROM {metadata_source} WHERE {metadata_condition}
-                """, () if kind == "movies" else (kind,))
-                record_timing("prepare_metadata", started)
+            else:
+                self._refresh_title_index(db, kind)
             total = None
             limit = ""
             provider_projection = ""
@@ -959,8 +1008,15 @@ class CatalogStore:
                 limit = "LIMIT ? OFFSET ?"
                 query_params.extend((50, (page - 1) * 50))
             started = time.perf_counter()
+            # Page through compact indexed columns first; large JSON is only read for the visible rows.
+            ids = [row[0] for row in db.execute(
+                f"""SELECT {identity_projection} AS id FROM {source}{where}{group_by}
+                    ORDER BY ({order}) IS NULL, {order} {sort}{secondary_order}, {sort_name}, s.{key}
+                    {limit}""",
+                query_params,
+            )]
             rows = db.execute(
-                f"""SELECT {identity_projection} AS id, {display_name} AS name, s.category_id, {tmdb_rating} AS rating,
+                f"""SELECT s.{key} AS id, {display_name} AS name, s.category_id, {tmdb_rating} AS rating,
                            {votes} AS votes, {year} AS year, {watchlist_expression} AS watchlisted,
                            {genre_expression} AS genre, COALESCE(c.category_name, 'Sin categoría') AS category_name,
                            json_extract(s.raw_json, '$.youtube_trailer') AS youtube_trailer,
@@ -969,12 +1025,12 @@ class CatalogStore:
                            {watched_projection}
                            {provider_projection}
                            {version_projection}
-                    FROM {source}{where}{group_by}
-                    ORDER BY ({order}) IS NULL, {order} {sort}{secondary_order}, CASEFOLD({display_name}), s.{key}
-                    {limit}
+                    FROM {source} WHERE s.{key} IN (SELECT value FROM json_each(?))
                     """,
-                projection_params + query_params,
+                projection_params + [json.dumps(ids)],
             ).fetchall()
+            position = {record_id: index for index, record_id in enumerate(ids)}
+            rows.sort(key=lambda row: position[row["id"]])
             record_timing("select_rows", started)
         items = []
         for row in rows:

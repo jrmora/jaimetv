@@ -3,6 +3,8 @@
 const form = document.querySelector("#filters");
 const errorBox = document.querySelector("#error");
 const cardResults = document.querySelector("#card-results");
+const searchSpinner = document.querySelector("#search-spinner");
+const searchStatus = document.querySelector("#search-status");
 let controller;
 let timer;
 let version = 0;
@@ -15,6 +17,12 @@ function updateChildrenCategories() {
     if (input.disabled) input.checked = false;
     input.labels.forEach(label => { label.hidden = input.disabled; });
   }
+}
+
+function setBusy(busy, message = "") {
+  cardResults.setAttribute("aria-busy", String(busy));
+  if (searchSpinner) searchSpinner.hidden = !busy;
+  if (searchStatus) searchStatus.textContent = busy ? "Buscando…" : message;
 }
 
 function parameters() {
@@ -34,8 +42,9 @@ async function load(page = 1) {
   const current = ++version;
   form.elements.page.value = page;
   const params = parameters();
-  cardResults.setAttribute("aria-busy", "true");
+  setBusy(true);
   errorBox.hidden = true;
+  let message = "";
   try {
     const response = await fetch(`${form.dataset.endpoint}?${params}`, { signal: controller.signal });
     const data = await response.json();
@@ -50,13 +59,14 @@ async function load(page = 1) {
     clearUrl.searchParams.set("children", params.get("children"));
     clear.href = clearUrl;
     history.replaceState(null, "", `${location.pathname}?${params}`);
+    message = data.total === 1 ? "1 resultado" : `${data.total} resultados`;
   } catch (error) {
     if (error.name !== "AbortError" && current === version) {
       errorBox.textContent = `No se pudo actualizar el catálogo. ${error.message}. Vuelve a intentarlo.`;
       errorBox.hidden = false;
     }
   } finally {
-    if (current === version) cardResults.setAttribute("aria-busy", "false");
+    if (current === version) setBusy(false, message);
   }
 }
 
@@ -69,7 +79,7 @@ for (const input of document.querySelectorAll('input[type="search"][name][form="
     clearTimeout(timer);
     controller?.abort();
     ++version;
-    cardResults.setAttribute("aria-busy", "false");
+    setBusy(true);
     timer = setTimeout(() => load(), 250);
   });
 }
