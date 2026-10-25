@@ -127,7 +127,7 @@ class MovieVersionsTests(unittest.TestCase):
         self.assertEqual(self.store.detail("movies", "10")["version_count"], 1)
         self.assertEqual(self.store.stats()["totals"]["movies"], 3)
 
-    def test_grouping_precedes_pagination_and_does_not_group_series(self):
+    def test_grouping_precedes_pagination_and_separates_movies_from_series(self):
         data = snapshot()
         data["movies"] = [{"stream_id": n, "name": f"Movie {n:03}"} for n in range(104)]
         data["series"].append({"series_id": 21, "name": "Series copy"})
@@ -141,8 +141,8 @@ class MovieVersionsTests(unittest.TestCase):
         self.assertEqual((first["total"], first["pages"], len(first["items"])), (52, 2, 50))
         self.assertEqual(len(second["items"]), 2)
         self.assertEqual(len({item["name"] for item in first["items"] + second["items"]}), 52)
-        self.assertEqual(self.store.query("series", page=1)["total"], 2)
-        self.assertEqual(self.store.stats()["totals"], {"movies": 52, "series": 2})
+        self.assertEqual(self.store.query("series", page=1)["total"], 1)
+        self.assertEqual(self.store.stats()["totals"], {"movies": 52, "series": 1})
 
     def test_same_poster_without_same_tmdb_identity_is_not_enough(self):
         self.cache("11", 200)
@@ -169,3 +169,126 @@ class MovieVersionsTests(unittest.TestCase):
         self.assertEqual(result[0]["name"], "La misma película")
         self.assertEqual(result[0]["version_count"], 2)
         self.assertTrue(result[0]["watchlisted"])
+
+
+class SeriesVersionsTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.path = Path(self.temp.name) / "catalog.db"
+        self.app = create_app(self.path)
+        self.store = self.app.config["CATALOG_STORE"]
+        self.data = snapshot()
+        self.data["series"] = [
+            {"series_id": 20, "name": "Same Series (2020)", "category_id": "1",
+             "cover": "https://example.invalid/series-en.jpg"},
+            {"series_id": 21, "name": "Misma serie 4K (2020)", "category_id": "2",
+             "cover": "https://example.invalid/series-es.jpg"},
+            {"series_id": 22, "name": "Unmatched"},
+        ]
+        self.store.replace(self.data)
+        for record_id in ("20", "21"):
+            self.cache(record_id)
+        self.client = self.app.test_client()
+
+    def cache(self, record_id, **changes):
+        raw = self.store.detail("series", record_id)["data"]
+        self.store.save_tmdb("series", record_id, "CA", fingerprint(raw), {
+            "status": "matched", "id": 100, "title": "La misma serie",
+            "genres": ["Drama"], "rating": 8, "votes": 200,
+            "release_date": "2020-01-01", **changes,
+        })
+
+    def test_single_card_filters_counts_and_both_detail_posters(self):
+        result = self.store.query("series", page=1)
+        self.assertEqual(result["total"], 2)
+        self.assertEqual(self.store.stats()["totals"]["series"], 2)
+        self.assertEqual(self.store.title_count("series"), 2)
+        for filters in ({"q": "Same Series"}, {"q": "4K"}, {"q": "misma"},
+                        {"genre": ["Drama"]}):
+            filtered = self.store.query("series", page=1, **filters)
+            self.assertEqual(filtered["total"], 1)
+            self.assertEqual(filtered["items"][0]["name"], "La misma serie")
+            self.assertEqual(filtered["items"][0]["version_count"], 2)
+        page = self.client.get("/series?children=all").get_data(as_text=True)
+        self.assertEqual(page.count('<article class="catalog-card'), 2)
+        self.assertIn("2 versiones", page)
+        self.assertIn("Series únicas: 2", self.client.get("/admin").get_data(as_text=True))
+        for record_id in ("20", "21"):
+            detail = self.store.detail("series", record_id)
+            self.assertEqual(detail["data"], self.data["series"][int(record_id) - 20])
+            page = self.client.get(f"/catalog/series/detail?id={record_id}").get_data(as_text=True)
+            self.assertIn("2 versiones disponibles", page)
+            self.assertIn("https://example.invalid/series-en.jpg", page)
+            self.assertIn("https://example.invalid/series-es.jpg", page)
+            self.assertIn('<h1 class="text-break mb-0">La misma serie</h1>', page)
+        self.assertEqual(self.store.tmdb_coverage("series")["total"], 3)
+
+    def test_existing_flags_shared_and_controls_apply_to_all_versions(self):
+        with self.store.connect() as db:
+            db.execute("INSERT INTO banned_series VALUES ('21', 'legacy')")
+            db.execute("INSERT INTO watchlist VALUES ('series', '21', 'legacy')")
+        self.assertEqual(self.store.query("series", banned="only", watchlist=True)["total"], 1)
+        self.assertEqual(self.store.recommended_titles("series", 999, [100]), [])
+        for record_id in ("20", "21"):
+            self.assertTrue(self.store.detail("series", record_id)["banned"])
+            self.assertTrue(self.store.detail("series", record_id)["watchlisted"])
+        self.store.set_banned("series", "20", False)
+        self.store.set_watchlisted("series", "20", False)
+        self.assertEqual(self.store.query("series", banned="only")["total"], 0)
+        self.assertEqual(self.store.query("series", watchlist=True)["total"], 0)
+        self.store.set_watchlisted("series", "21", True)
+        recommendations = self.store.recommended_titles("series", 999, [100])
+        self.assertEqual(len(recommendations), 1)
+        self.assertEqual(recommendations[0]["version_count"], 2)
+        self.assertEqual(recommendations[0]["name"], "La misma serie")
+        self.assertTrue(recommendations[0]["watchlisted"])
+        self.store.set_banned("series", "20", True)
+        reopened = CatalogStore(self.path)
+        self.assertEqual(reopened.query("series", page=1)["total"], 1)
+        self.assertTrue(reopened.detail("series", "21")["banned"])
+
+    def test_stale_unconfirmed_invalid_and_other_kind_ids_do_not_group(self):
+        for changes in ({"status": "candidates"}, {"status": "missing"}, {"id": "100"},
+                        {"id": None}, {"id": 0}, {"id": True}, {"id": 101}):
+            self.cache("21", **changes)
+            self.assertEqual(self.store.query("series", page=1)["total"], 3, changes)
+        self.cache("21")
+        raw = self.store.detail("movies", "10")["data"]
+        self.store.save_tmdb("movies", "10", "CA", fingerprint(raw), {"status": "matched", "id": 100})
+        self.store.set_banned("series", "20", True)
+        self.assertFalse(self.store.detail("movies", "10")["banned"])
+        self.store.set_banned("series", "20", False)
+        changed = copy.deepcopy(self.data)
+        changed["series"][1]["name"] = "Changed identity"
+        self.store.replace(changed)
+        self.assertEqual(self.store.query("series", page=1)["total"], 3)
+        self.assertEqual(self.store.detail("series", "20")["version_count"], 1)
+
+    def test_pagination_groups_before_limit_and_preserves_rating_order(self):
+        self.data["series"] = [{"series_id": n, "name": f"Series {n:03}"} for n in range(104)]
+        self.store.replace(self.data)
+        for n in range(104):
+            self.cache(str(n), id=n // 2 + 1, title=f"Serie {n // 2:03}")
+        for sort_by in ("name", "rating", "year"):
+            first = self.store.query("series", page=1, sort_by=sort_by)
+            second = self.store.query("series", page=2, sort_by=sort_by)
+            self.assertEqual((first["total"], first["pages"], len(first["items"])), (52, 2, 50))
+            self.assertEqual(len(second["items"]), 2)
+            self.assertEqual(len({item["id"] for item in first["items"] + second["items"]}), 52)
+        self.assertEqual(self.store.stats()["totals"]["series"], 52)
+
+    def test_only_all_withdrawn_versions_mark_group_unavailable(self):
+        from unittest.mock import Mock
+
+        changed = copy.deepcopy(self.data)
+        changed["series"] = changed["series"][1:]
+        self.store.sync(Mock(download=Mock(return_value=changed)))
+        grouped = next(item for item in self.store.query("series")["items"] if item["version_count"] == 2)
+        self.assertFalse(grouped["unavailable"])
+        detail = self.store.detail("series", "20")
+        self.assertFalse(detail["unavailable"])
+        self.assertEqual([v["unavailable"] for v in detail["versions"]], [True, False])
+        changed["series"] = changed["series"][1:]
+        self.store.sync(Mock(download=Mock(return_value=changed)))
+        self.assertTrue(self.store.detail("series", "21")["unavailable"])

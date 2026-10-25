@@ -4,7 +4,7 @@
 {% block main_class %}catalog-page{% endblock %}
 {% block content %}
 {% if filters.get('banned') == 'only' %}
-<h2 class="h5">Películas bloqueadas</h2>
+<h2 class="h5">{{ 'Series bloqueadas' if kind == 'series' else 'Películas bloqueadas' }}</h2>
 {% endif %}
 {% if filters.get('watchlist') %}
 <h2 class="h5">Mi lista</h2>
@@ -44,10 +44,10 @@
   <input type="hidden" name="page" value="{{ filters.page }}">
   <input type="hidden" name="view" value="cards">
   {% if filters.get('watchlist') %}<input type="hidden" name="watchlist" value="1">{% endif %}
-  {% if kind == 'movies' %}
   {% if filters.get('banned') == 'only' %}
   <input type="hidden" name="banned" value="only">
   {% endif %}
+  {% if kind == 'movies' %}
   <fieldset>
     <legend class="fs-6">Muéstrame</legend>
     {% for value, label in [('all', 'Todo'), ('unseen', 'Películas que no he visto'), ('seen', 'Volver a ver')] %}

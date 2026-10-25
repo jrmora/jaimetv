@@ -23,11 +23,11 @@
   <p class="watched-error small text-danger mb-0 mt-1" role="alert" hidden></p>
 </form>
 {% endmacro %}
-{% macro banned_button(record_id, banned, csrf, filters, icon_only=false, responsive=false) %}
-<form class="banned-form mt-2" method="post" action="{{ url_for('movie_banned', record_id=record_id, **filters) }}">
+{% macro banned_button(record_id, banned, csrf, filters, icon_only=false, responsive=false, kind='movies') %}
+<form class="banned-form mt-2" method="post" action="{{ url_for('title_banned', kind=kind, record_id=record_id, **filters) }}">
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <input type="hidden" name="banned" value="{{ '0' if banned else '1' }}">
-  <button type="submit" class="btn btn-sm {{ 'icon-button' if icon_only else '' }} {{ 'btn-danger' if banned else 'btn-outline-secondary' }}" {% if icon_only %}data-icon-only="true"{% endif %} aria-label="{{ 'Desbloquear' if banned else 'No me interesa' }}" aria-pressed="{{ 'true' if banned else 'false' }}" title="{{ 'Volver a mostrar esta película' if banned else 'Ocultar esta película del catálogo' }}">
+  <button type="submit" class="btn btn-sm {{ 'icon-button' if icon_only else '' }} {{ 'btn-danger' if banned else 'btn-outline-secondary' }}" {% if icon_only %}data-icon-only="true"{% endif %} aria-label="{{ 'Desbloquear' if banned else 'No me interesa' }}" aria-pressed="{{ 'true' if banned else 'false' }}" title="{{ 'Volver a mostrar este título' if banned else 'Ocultar este título del catálogo' }}">
     {% if icon_only or responsive %}
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m6 6 12 12"/></svg>
     {% endif %}

@@ -269,8 +269,8 @@ def create_app(db_path=None):
             abort(400, description="Estado TMDB inválido.")
         watched = request.args.get("watched", "unseen" if kind == "movies" else "all")
         banned = request.args.get("banned", "hide")
-        if banned not in {"hide", "only"} or (kind not in {None, "movies"} and banned != "hide"):
-            abort(400, description="Filtro de películas bloqueadas inválido.")
+        if banned not in {"hide", "only"}:
+            abort(400, description="Filtro de títulos bloqueados inválido.")
         if watched not in {"all", "seen", "unseen"} or (kind not in {None, "movies"} and watched != "all"):
             abort(400, description="Filtro de películas vistas inválido.")
         if len(categories) > 100 or len(genres) > 100 or any(len(value) > 200 for value in categories + genres):
@@ -324,18 +324,20 @@ def create_app(db_path=None):
             return jsonify(id=record_id, watchlist=value == "1")
         return redirect(url_for("detail", kind=kind, id=record_id), code=303)
 
-    @app.post("/catalog/movies/<record_id>/banned")
-    def movie_banned(record_id):
+    @app.post("/catalog/<kind>/<record_id>/banned")
+    def title_banned(kind, record_id):
+        if kind not in KINDS:
+            abort(404)
         check_sync_csrf()
         value = request.form.get("banned")
         if value not in {"0", "1"}:
-            abort(400, description="Estado de película bloqueada inválido.")
+            abort(400, description="Estado de título bloqueado inválido.")
         filters = parameters()
-        if not store.set_movie_banned(record_id, value == "1"):
-            abort(404, description="La película no existe en el catálogo local.")
+        if not store.set_banned(kind, record_id, value == "1"):
+            abort(404, description="El título no existe en el catálogo local.")
         if request.accept_mimetypes.best == "application/json":
             return jsonify(id=record_id, banned=value == "1")
-        return redirect(url_for("detail", kind="movies", id=record_id, **filters), code=303)
+        return redirect(url_for("detail", kind=kind, id=record_id, **filters), code=303)
 
     @app.post("/catalog/movies/<record_id>/watched")
     def movie_watched(record_id):
@@ -376,6 +378,7 @@ def create_app(db_path=None):
             "admin.html", labels=LABELS, active="admin", kind=kind,
             coverages={value: store.tmdb_coverage(value) for value in ("movies", "series")},
             movie_title_count=store.movie_title_count(),
+            series_title_count=store.title_count("series"),
             maintenance_dates=dates,
             maintenance_dates_display={
                 key: datetime.fromisoformat(value).astimezone(ZoneInfo("America/Toronto")).strftime("%Y-%m-%d %H:%M:%S %Z")

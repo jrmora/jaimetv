@@ -30,7 +30,7 @@ document.addEventListener("submit", async (event) => {
     const visibleLabel = button.querySelector?.(".detail-action-label");
     if (visibleLabel) visibleLabel.textContent = label;
     button.setAttribute("aria-label", label);
-    button.title = isWatchlist ? label : isBanned ? (enabled ? "Volver a mostrar esta película" : "Ocultar esta película del catálogo") : (enabled ? "Marcar como no vista" : "Marcar como vista");
+    button.title = isWatchlist ? label : isBanned ? (enabled ? "Volver a mostrar este título" : "Ocultar este título del catálogo") : (enabled ? "Marcar como no vista" : "Marcar como vista");
     button.setAttribute("aria-pressed", String(enabled));
     button.classList.toggle(isWatchlist ? "btn-primary" : isBanned ? "btn-danger" : "btn-success", enabled);
     if (isWatchlist) button.querySelector("svg").setAttribute("fill", enabled ? "currentColor" : "none");

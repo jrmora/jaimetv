@@ -29,8 +29,8 @@
       <div class="d-flex flex-wrap gap-2">
       {% if kind == 'movies' %}
       {{ watched_button(item.id, item.watched, sync_csrf, filters, icon_only=true) }}
-      {{ banned_button(item.id, item.banned, sync_csrf, filters, icon_only=true) }}
       {% endif %}
+      {{ banned_button(item.id, item.banned, sync_csrf, filters, icon_only=true, kind=kind) }}
       {{ watchlist_button(kind, item.id, item.watchlisted, sync_csrf) }}
       </div>
       {% if filters.get('my_services') == 1 and item.service_icons %}

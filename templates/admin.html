@@ -31,6 +31,7 @@
         <button id="catalog-sync" type="button" class="btn btn-outline-primary"
                 data-endpoint="{{ url_for('catalog_sync') }}" data-csrf="{{ sync_csrf }}" hidden>Sincronizar catálogo</button>
         <a class="btn btn-outline-secondary" href="{{ url_for('listing', kind='movies', banned='only', children='all', watched='all') }}">Ver películas bloqueadas</a>
+        <a class="btn btn-outline-secondary" href="{{ url_for('listing', kind='series', banned='only', children='all') }}">Ver series bloqueadas</a>
       </div>
       <div id="sync-status" class="mt-3" role="status" aria-live="polite" hidden></div>
       {% if sync_summary %}
@@ -88,7 +89,8 @@
       </div>
       <h3 class="h6">Cobertura TMDB</h3>
       <p><strong>Películas únicas: {{ movie_title_count }}</strong></p>
-      <p class="small text-muted">La cobertura mide registros/versiones del proveedor, no películas únicas. Incluye cada catálogo completo, independientemente de los filtros y del catálogo elegido para el lote.</p>
+      <p><strong>Series únicas: {{ series_title_count }}</strong></p>
+      <p class="small text-muted">La cobertura mide registros/versiones del proveedor, no títulos únicos. Incluye cada catálogo completo, independientemente de los filtros y del catálogo elegido para el lote.</p>
       <div class="table-responsive">
         <table class="table table-sm align-middle">
           <caption>Estado de consultas TMDB por catálogo</caption>

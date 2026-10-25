@@ -163,7 +163,7 @@ probar la nueva selección. No se extraen vídeos de IMDb.
 Al final de la ficha aparece «También te podrían gustar», con hasta seis
 recomendaciones de TMDB que existen en el catálogo local del mismo tipo.
 Se conserva el orden recomendado por TMDB, sin duplicar versiones del mismo
-título ni mostrar la obra actual o películas marcadas «No me interesa».
+título ni mostrar la obra actual o títulos marcados «No me interesa».
 El cruce usa asociaciones TMDB confirmadas y vigentes; mejora conforme se
 enriquece el catálogo. Si no hay coincidencias locales, no se muestra la sección.
 La primera visita consulta la primera página de recomendaciones de TMDB y guarda
@@ -196,7 +196,7 @@ en la pestaña Red del navegador. Se miden el tiempo total del servidor,
 el tiempo dentro de conexiones SQLite (`sqlite`), el cierre de
 transacciones (`commit`, incluida reversión en caso de error), y las fases de consulta `rating_mean`, `count`
 y `select_rows`. `prepare_versions` mide la identificación de versiones de
-películas y sus preferencias compartidas en una tabla temporal compacta.
+películas y series y sus preferencias compartidas en una tabla temporal compacta.
 `refresh_index` mide la comprobación del índice de títulos `title_index`:
 guarda por título si está enlazado a TMDB, su ID, valoración, votos, año,
 personas y un texto de búsqueda normalizado (título del proveedor, títulos
@@ -230,8 +230,8 @@ tarjetas, el problema no es el límite de 50 tarjetas. La búsqueda infantil
 filtra primero los géneros infantiles antes de analizar personas y reutiliza
 la asociación TMDB ya enlazada en vez de volver a buscarla por cada campo.
 
-En Administración, «Ver películas bloqueadas» abre el catálogo de películas
-marcadas «No me interesa», con controles para desbloquearlas. No se añade un
+En Administración, «Ver películas bloqueadas» y «Ver series bloqueadas» abren los
+catálogos marcados «No me interesa», con controles para desbloquearlos. No se añade un
 selector de bloqueadas al panel de filtros.
 
 El buscador principal aparece sobre los filtros, siempre accesible aunque estén
@@ -270,25 +270,26 @@ confirmar una ficha.
 
 #### Películas vistas
 
-Las películas con el mismo ID TMDB confirmado y vigente se presentan como
+Las películas y series con el mismo ID TMDB confirmado y vigente se presentan como
 **una sola tarjeta**, incluidas copias HD/4K y de distintos idiomas. La tarjeta
 usa el título español guardado de TMDB y muestra **N versiones**; al abrirla
 aparecen las portadas y nombres originales en una galería adaptable a móvil.
-No se deduplican series, coincidencias de nombre/imagen por sí solas ni
+Los catálogos se agrupan por separado: una película y una serie nunca se mezclan.
+No se deduplican coincidencias de nombre/imagen por sí solas ni
 asociaciones TMDB pendientes, inválidas o desactualizadas.
 
 La agrupación se aplica antes de contar y paginar, también en búsquedas,
 resultados de personas y Mi lista. Buscar el nombre de cualquiera de las
-versiones encuentra la película. Las estadísticas y el contador de películas
-únicas de Administración cuentan una vez cada película. La cobertura TMDB
+versiones encuentra el título. Las estadísticas y los contadores de películas
+y series únicas de Administración cuentan una vez cada título. La cobertura TMDB
 sigue midiendo registros/versiones del proveedor, porque cada asociación
 necesita comprobarse; el CSV y la sincronización conservan todos los registros.
 
-Las versiones comparten **Vista**, **Quiero ver** y **No me interesa**.
+Las versiones comparten **Quiero ver** y **No me interesa** (y **Vista** en películas).
 Una marca previa en cualquiera de ellas se aplica al grupo; desmarcarla la
 retira de todas las versiones asociadas actualmente. No se borran ni fusionan
 los JSON del proveedor, y una sincronización conserva estas preferencias.
-La valoración ponderada cuenta cada película una sola vez al calcular la media.
+La valoración ponderada cuenta cada título una sola vez al calcular la media.
 
 El filtro **Época** de películas permite combinar **Recientes**
 (2015 en adelante), **Modernas** (2000–2014), **Nostalgia** (1980–1999),
@@ -307,16 +308,16 @@ No se infiere por personas ni por sinopsis; la ausencia de etiqueta no descarta
 esa temática. Las cachés antiguas no contienen palabras clave: usa
 **Actualizar TMDB** para obtenerlas, sin actualización masiva automática.
 
-**No me interesa**, solo en las fichas de películas, las oculta de todos los
+**No me interesa**, en tarjetas, fichas y recomendaciones de películas y series, las oculta de todos los
 listados y búsquedas (incluidos Niños, Otros alfabetos y resultados por persona).
 Se aplica inmediatamente al pulsar el botón, sin pedir confirmación.
 No hay un filtro visible de bloqueadas. Para recuperarlas, abre
-`/movies?banned=only`, entra en su ficha y pulsa **Desbloquear**.
+`/movies?banned=only` o `/series?banned=only`, entra en su ficha y pulsa **Desbloquear**.
 Los demás filtros siguen aplicándose en esa vista.
 Una ficha enlazada directamente sigue accesible para desbloquearla.
-El bloqueo se guarda por identificador del proveedor en `banned_movies`, separado
+El bloqueo se guarda por identificador del proveedor en `banned_movies` o `banned_series`, separado
 del estado de vista, los datos originales y TMDB; persiste al reiniciar y
-sincronizar. No elimina películas ni hace consultas externas.
+sincronizar. No elimina títulos ni hace consultas externas.
 
 En las tarjetas y fichas de películas, **Ya la vi** guarda la marca y cambia a
 **Vista**; pulsa de nuevo para marcarla como no vista. El filtro **Muéstrame**
@@ -527,7 +528,7 @@ Las películas y series que ya no aparecen en la descarga no se borran (se
 conservan vistas, listas y asociaciones TMDB): se registran en
 `provider_removed` y se muestran con borde rojo y la etiqueta «Ya no
 disponible» en tarjetas, recomendaciones y ficha. Si vuelven a aparecer en una
-sincronización posterior, la marca se retira. Una película agrupada solo se
+sincronización posterior, la marca se retira. Una película o serie agrupada solo se
 marca cuando todas sus versiones han desaparecido; en la ficha se marca cada
 versión retirada. El resumen indica cuántos títulos se marcaron y cuántos
 volvieron a estar disponibles. Una lista vacía no marca nada, por si se trata

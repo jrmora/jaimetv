@@ -62,8 +62,8 @@
     <div class="detail-actions d-flex flex-wrap gap-2">
       {% if kind == 'movies' %}
       {{ watched_button(request.args.get('id'), record.watched, sync_csrf, filters, icon_only=true, responsive=true) }}
-      {{ banned_button(request.args.get('id'), record.banned, sync_csrf, filters, icon_only=true, responsive=true) }}
       {% endif %}
+      {{ banned_button(request.args.get('id'), record.banned, sync_csrf, filters, icon_only=true, responsive=true, kind=kind) }}
       {{ watchlist_button(kind, request.args.get('id'), record.watchlisted, sync_csrf, responsive=true) }}
     </div>
     {% if fields %}

@@ -92,7 +92,8 @@ class BannedMoviesTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/catalog/movies?q=Batman").json["total"], 0)
         for path in ("/series", "/catalog/series/detail?id=20"):
             html = self.client.get(path).get_data(as_text=True)
-            self.assertNotIn('class="banned-form', html)
+            self.assertIn('class="banned-form', html)
+            self.assertIn("/catalog/series/20/banned", html)
             self.assertNotIn('id="banned-filter"', html)
 
     def test_combined_filters_and_pagination_count_exclude_banned(self):
@@ -137,13 +138,79 @@ class BannedMoviesTests(unittest.TestCase):
         self.assertEqual(self.ban(record_id="missing").status_code, 404)
         self.assertEqual(self.client.get("/catalog/movies/10/banned").status_code, 405)
         self.assertFalse(self.store.detail("movies", "10")["banned"])
-        for path in ("/movies?banned=all", "/series?banned=only"):
+        for path in ("/movies?banned=all", "/series?banned=all"):
             self.assertEqual(self.client.get(path).status_code, 400)
         with self.assertRaises(ValueError):
             self.store.set_movie_banned("10", "1")
         with self.assertRaises(ValueError):
-            self.store.query("series", banned="only")
+            self.store.query("series", banned="all")
         response = self.client.post("/catalog/movies/10/banned?banned=only",
                                     data={"csrf": self.csrf, "banned": "1"})
         self.assertEqual(response.status_code, 303)
         self.assertIn("banned=only", response.location)
+
+    def test_series_blocking_persists_and_is_separate_from_movies(self):
+        self.store.set_watchlisted("series", "20", True)
+        raw = self.store.detail("series", "20")["data"]
+        self.store.save_tmdb("series", "20", "CA", fingerprint(raw), {
+            "status": "matched", "id": 100, "cast": [{"name": "An Actor"}],
+        })
+        url = "/catalog/series/20/banned"
+        response = self.client.post(url, data={"banned": "1", "csrf": self.csrf},
+                                    headers={"Accept": "application/json"})
+        self.assertEqual(response.json, {"id": "20", "banned": True})
+        reopened = CatalogStore(self.path)
+        self.assertTrue(reopened.detail("series", "20")["banned"])
+        self.assertTrue(reopened.detail("series", "20")["watchlisted"])
+        self.assertEqual(reopened.query("series", q="Batman")["total"], 0)
+        self.assertEqual(reopened.recommended_titles("series", 101, [100]), [])
+        self.assertEqual(self.client.get("/api/catalog/series?watchlist=1").json["total"], 0)
+        page = self.client.get("/people?name=An+Actor").get_data(as_text=True)
+        self.assertNotIn("Batman: la serie", page)
+        payload = self.client.get("/api/catalog/series?view=cards&banned=only").json
+        self.assertEqual(payload["total"], 1)
+        self.assertTrue(payload["items"][0]["banned"])
+        self.assertIn("Desbloquear", payload["html"])
+        self.assertIn('name="banned" value="only"',
+                      self.client.get("/series?banned=only").get_data(as_text=True))
+        self.assertIn("Ver series bloqueadas", self.client.get("/admin").get_data(as_text=True))
+        self.assertFalse(self.store.detail("movies", "10")["banned"])
+        reopened.sync(Mock(download=Mock(return_value=self.data)))
+        self.assertTrue(reopened.detail("series", "20")["banned"])
+        response = self.client.post(url + "?banned=only", data={"banned": "0", "csrf": self.csrf})
+        self.assertEqual(response.status_code, 303)
+        self.assertIn("/catalog/series/detail?", response.location)
+        self.assertEqual(reopened.query("series")["total"], 1)
+        self.assertEqual(reopened.query("series", banned="only")["total"], 0)
+        self.assertEqual(len(reopened.recommended_titles("series", 101, [100])), 1)
+
+    def test_series_block_validation_and_missing_id(self):
+        for path, data, status in (
+            ("/catalog/series/20/banned", {"csrf": "bad", "banned": "1"}, 400),
+            ("/catalog/series/20/banned", {"csrf": self.csrf, "banned": "true"}, 400),
+            ("/catalog/series/missing/banned", {"csrf": self.csrf, "banned": "1"}, 404),
+            ("/catalog/unknown/20/banned", {"csrf": self.csrf, "banned": "1"}, 404),
+        ):
+            self.assertEqual(self.client.post(path, data=data).status_code, status)
+        self.assertEqual(self.client.get("/catalog/series/20/banned").status_code, 405)
+        self.assertFalse(self.store.detail("series", "20")["banned"])
+        with self.assertRaises(ValueError):
+            self.store.set_banned("series", "20", "1")
+
+    def test_series_pagination_kids_and_overlapping_movie_ids(self):
+        self.data["series"] = [
+            {"series_id": number, "name": f"Series {number:03}", "category_id": "1"}
+            for number in range(51)
+        ]
+        self.store.replace(self.data)
+        raw = self.store.detail("series", "10")["data"]
+        self.store.save_tmdb("series", "10", "CA", fingerprint(raw), {
+            "status": "matched", "genres": ["Familia"],
+        })
+        self.assertTrue(self.store.set_banned("series", "10", True))
+        self.assertFalse(self.store.detail("movies", "10")["banned"])
+        payload = self.client.get("/api/catalog/series?view=cards&page=2&children=all").json
+        self.assertEqual((payload["total"], payload["pages"], payload["page"]), (50, 1, 1))
+        self.assertTrue(all(not item["banned"] for item in payload["items"]))
+        self.assertNotIn("Series 010", self.client.get("/kids/series").get_data(as_text=True))
+        self.assertIn("Series 010", self.client.get("/kids/series?banned=only").get_data(as_text=True))

@@ -17,7 +17,7 @@
       {% if item.get('version_count', 1) > 1 %}<p class="mb-1"><span class="badge text-bg-secondary">{{ item.version_count }} versiones</span></p>{% endif %}
       {% if item.year %}<p class="small text-muted mb-0">{{ item.year }}</p>{% endif %}
       <div class="d-flex flex-wrap gap-2">
-      {% if kind == 'movies' %}{{ banned_button(item.id, false, sync_csrf, {}, icon_only=true) }}{% endif %}
+      {{ banned_button(item.id, false, sync_csrf, {}, icon_only=true, kind=kind) }}
       {{ watchlist_button(kind, item.id, item.watchlisted, sync_csrf) }}
       </div>
     </div>
