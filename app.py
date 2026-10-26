@@ -403,7 +403,9 @@ def create_app(db_path=None):
         elif filters["children"] == "only":
             return redirect(url_for("kids_listing", kind=kind, **filters))
         view = presentation()
-        result = store.query(kind, **filters, page=page_number())
+        result = store.query(kind, **filters, page=page_number(), include_genres=True)
+        filters["genre"] = result.pop("selected_genres")
+        genres = result.pop("available_genres")
         card_provider_icons(result)
         filters.update(view=view, page=result.get("page", 1))
         foreign = bool(filters["foreign"])
@@ -427,7 +429,7 @@ def create_app(db_path=None):
                 item["category_id"] for item in categories
                 if item["category_name"].casefold() in {name.casefold() for name in CHILDREN_CATEGORIES[kind]}
             },
-            genres=store.genres(kind), movie_eras=MOVIE_ERAS,
+            genres=genres, movie_eras=MOVIE_ERAS,
             provider_options=provider_icons({"all": names})["all"],
             subscriptions=ordered_platforms(store.subscriptions()),
             selected_categories=filters["category"] if isinstance(filters["category"], list) else ([filters["category"]] if filters["category"] else []),
@@ -648,8 +650,13 @@ def create_app(db_path=None):
             abort(404)
         filters = parameters()
         view = presentation()
-        result = store.query(kind, **filters, page=page_number() if view == "cards" else None)
+        result = store.query(kind, **filters, page=page_number() if view == "cards" else None,
+                             include_genres=view == "cards")
         if view == "cards":
+            filters["genre"] = result["selected_genres"]
+            result["genres_html"] = render_template(
+                "genre_filter.html", genres=result["available_genres"], filters=filters,
+            )
             card_provider_icons(result)
             filters.update(view=view, page=result["page"])
             endpoint = "kids_listing" if filters["children"] == "only" else "listing"

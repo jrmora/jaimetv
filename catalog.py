@@ -978,7 +978,7 @@ class CatalogStore:
                 names.setdefault(name.casefold(), name)
         return sorted(names.values(), key=str.casefold)
 
-    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", tmdb_status="all", era=None, watchlist=False):
+    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", tmdb_status="all", era=None, watchlist=False, include_genres=False):
         table, categories, key = KINDS[kind]
         if page is not None and (isinstance(page, bool) or not isinstance(page, int) or page < 1):
             raise ValueError("Página inválida.")
@@ -1071,6 +1071,8 @@ class CatalogStore:
             conditions.append(f"HAS_PERSON({people_metadata}, ?) = 1")
             params.append(person)
         selected_genres = genre if isinstance(genre, list) else ([genre] if genre else [])
+        genre_condition_index = len(conditions)
+        genre_param_index = len(params)
         if selected_genres:
             conditions.append("(" + " OR ".join(f"HAS_GENRE({genre_expression}, ?) = 1" for _ in selected_genres) + ")")
             params.extend(selected_genres)
@@ -1131,6 +1133,35 @@ class CatalogStore:
             order = sort_name
         with self.connect() as db:
             self._prepare_title_versions(db, kind)
+            if include_genres:
+                started = time.perf_counter()
+                # Facets ignore their own OR selection, but honor every other filter.
+                facet_conditions = list(conditions)
+                facet_params = list(params)
+                if selected_genres:
+                    del facet_conditions[genre_condition_index]
+                    del facet_params[genre_param_index:genre_param_index + len(selected_genres)]
+                facet_where = " WHERE " + " AND ".join(facet_conditions) if facet_conditions else ""
+                available_genres = [row[0] for row in db.execute(
+                    f"""SELECT DISTINCT g.value FROM {source}
+                        JOIN json_each(score.payload, '$.genres') g
+                        {facet_where}
+                        {"AND" if facet_conditions else "WHERE"} g.type='text' AND TRIM(g.value)<>''
+                        ORDER BY CASEFOLD(g.value), g.value""",
+                    facet_params,
+                )]
+                available_names = {name.casefold() for name in available_genres}
+                active_genres = [name for name in selected_genres if name.casefold() in available_names]
+                if active_genres != selected_genres:
+                    conditions = facet_conditions
+                    params = facet_params
+                    if active_genres:
+                        conditions.append("(" + " OR ".join(
+                            f"HAS_GENRE({genre_expression}, ?) = 1" for _ in active_genres
+                        ) + ")")
+                        params.extend(active_genres)
+                    where = " WHERE " + " AND ".join(conditions) if conditions else ""
+                record_timing("genre_facets", started)
             total = None
             limit = ""
             provider_projection = ""
@@ -1209,6 +1240,8 @@ class CatalogStore:
             "items": items,
             "total": len(rows) if total is None else total,
         }
+        if include_genres:
+            result.update(available_genres=available_genres, selected_genres=active_genres)
         if page is not None:
             result.update(page=page, pages=pages, per_page=50)
         return result

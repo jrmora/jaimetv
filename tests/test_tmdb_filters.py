@@ -45,8 +45,72 @@ class TMDBFilterTests(unittest.TestCase):
             self.assertEqual(self.store.query("movies", **filters)["total"], 0)
         page = self.client.get("/movies?children=all").get_data(as_text=True)
         self.assertNotIn('name="category"', page)
-        self.assertIn("Géneros de TMDB", page)
+        self.assertIn('id="catalog-genres"', page)
         self.assertNotIn("CAST. ANIMACION", page)
+
+    def test_genre_facets_follow_filters_and_clear_impossible_selections(self):
+        self.cache(record_id="10", genres=["Drama", "Crimen"], providers={"flatrate": ["Netflix"]})
+        self.cache(record_id="11", genres=["Comedia"], providers={"flatrate": ["Disney Plus"]})
+        for filters, expected in (
+            ({}, ["Comedia", "Crimen", "Drama"]),
+            ({"q": "ÁRBOL"}, ["Comedia"]),
+            ({"provider": ["Netflix"]}, ["Crimen", "Drama"]),
+            ({"watched": "seen"}, []),
+            ({"actor": "No such actor"}, []),
+            ({"children": "only"}, []),
+            ({"watchlist": True}, []),
+        ):
+            result = self.store.query("movies", include_genres=True, **filters)
+            self.assertEqual(result["available_genres"], expected, filters)
+        result = self.store.query("movies", q="ÁRBOL", genre=["Drama"], include_genres=True)
+        self.assertEqual(result["selected_genres"], [])
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["items"][0]["id"], "11")
+        result = self.store.query("movies", genre=["Comedia", "Drama"], provider=["Netflix"],
+                                  actor="Actor TMDB", include_genres=True)
+        self.assertEqual(result["selected_genres"], ["Drama"])
+        self.assertEqual(result["available_genres"], ["Crimen", "Drama"])
+        self.assertEqual(result["total"], 1)
+        for name in result["available_genres"]:
+            self.assertGreater(self.store.query("movies", genre=name, provider=["Netflix"],
+                                                actor="Actor TMDB")["total"], 0)
+        self.store.set_movie_banned("11", True)
+        result = self.store.query("movies", include_genres=True)
+        self.assertEqual(result["available_genres"], ["Crimen", "Drama"])
+        self.assertEqual(self.store.query("movies", banned="only", include_genres=True)["available_genres"], ["Comedia"])
+
+    def test_genre_facets_ignore_own_or_selection_and_cover_all_pages(self):
+        self.data["series"] = [{"series_id": n, "name": f"Series {n:03}"} for n in range(60)]
+        self.store.replace(self.data)
+        for n in range(60):
+            self.cache(kind="series", record_id=str(n), title=f"Series {n:03}",
+                       genres=["Comedia" if n == 59 else "Drama"])
+        result = self.store.query("series", page=1, include_genres=True)
+        self.assertEqual(len(result["items"]), 50)
+        self.assertTrue(all(item["genre"] == "Drama" for item in result["items"]))
+        self.assertEqual(result["available_genres"], ["Comedia", "Drama"])
+        result = self.store.query("series", genre=["Drama"], include_genres=True)
+        self.assertEqual(result["available_genres"], ["Comedia", "Drama"])
+        self.assertEqual(result["selected_genres"], ["Drama"])
+        self.assertEqual(result["total"], 59)
+        combined = self.store.query("series", genre=["Drama", "Comedia"], include_genres=True)
+        self.assertEqual(combined["total"], 60)
+
+    def test_genre_facets_are_rendered_on_initial_page_and_updated_in_api(self):
+        self.cache(record_id="10", genres=["Drama"])
+        self.cache(record_id="11", genres=["Comedia"])
+        page = self.client.get("/movies?q=ÁRBOL&children=all&genre=Drama").get_data(as_text=True)
+        self.assertIn('name="genre" value="Comedia"', page)
+        self.assertNotIn('name="genre" value="Drama"', page)
+        self.assertIn("ÁRBOL", page)
+        data = self.client.get("/api/catalog/movies?view=cards&q=ÁRBOL&children=all&genre=Drama").json
+        self.assertEqual(data["available_genres"], ["Comedia"])
+        self.assertEqual(data["selected_genres"], [])
+        self.assertEqual(data["total"], 1)
+        self.assertIn('name="genre" value="Comedia"', data["genres_html"])
+        empty = self.client.get("/api/catalog/movies?view=cards&q=nonexistent&children=all").json
+        self.assertEqual(empty["available_genres"], [])
+        self.assertNotIn('name="genre"', empty["genres_html"])
 
     def test_manual_tmdb_link_accepts_id_or_matching_url_and_persists(self):
         for kind, record_id, media in (("movies", "10", "movie"), ("series", "20", "tv")):

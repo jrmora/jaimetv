@@ -195,7 +195,8 @@ Las respuestas de Flask incluyen `X-Request-ID` y `Server-Timing`, visibles
 en la pestaña Red del navegador. Se miden el tiempo total del servidor,
 el tiempo dentro de conexiones SQLite (`sqlite`), el cierre de
 transacciones (`commit`, incluida reversión en caso de error), y las fases de consulta `rating_mean`, `count`
-y `select_rows`. `prepare_versions` mide la identificación de versiones de
+y `select_rows`. `genre_facets` mide el cálculo de géneros disponibles con los filtros
+activos, antes de paginar. `prepare_versions` mide la identificación de versiones de
 películas y series y sus preferencias compartidas en una tabla temporal compacta.
 `refresh_index` mide la comprobación del índice de títulos `title_index`:
 guarda por título si está enlazado a TMDB, su ID, valoración, votos, año,
@@ -235,7 +236,13 @@ catálogos marcados «No me interesa», con controles para desbloquearlos. No se
 selector de bloqueadas al panel de filtros.
 
 El buscador principal aparece sobre los filtros, siempre accesible aunque estén
-plegados. Un único texto busca por título del proveedor, título traducido u
+plegados. En móvil y tableta, el botón «Filtros y orden» junto al buscador abre
+el panel sin reservar una franja para él cuando está cerrado. Los géneros se
+muestran directamente sobre las tarjetas. Solo se ofrecen géneros con coincidencias
+según los demás filtros activos, considerando todas las páginas. Se actualizan al
+buscar o cambiar filtros; una selección que deja de tener coincidencias se desmarca
+y oculta automáticamente. Los géneros se combinan con O: su propia selección no
+oculta otras opciones válidas. Un único texto busca por título del proveedor, título traducido u
 original TMDB, reparto, dirección y creadores (coincidencia en cualquiera).
 Se actualiza al escribir y se combina con los filtros seleccionados.
 No usa IA ni hace llamadas a TMDB; las personas solo se encuentran si su

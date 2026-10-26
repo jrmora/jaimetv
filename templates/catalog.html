@@ -16,9 +16,14 @@
 {% endif %}
 <div class="catalog-search mx-auto mb-3">
   <label for="q" class="visually-hidden">Buscar títulos, actores o directores</label>
+  <div class="catalog-search-controls d-flex align-items-center gap-2">
   <div class="input-group input-group-lg">
     <input id="q" name="q" form="filters" type="search" class="form-control" maxlength="200" value="{{ filters.q }}" placeholder="Busca un título, actor o director…" autocomplete="off">
     <button class="btn btn-primary search-button" type="submit" form="filters"><span id="search-spinner" class="spinner-border spinner-border-sm" aria-hidden="true" hidden></span><span>Buscar</span></button>
+  </div>
+  <button id="filters-toggle" class="btn btn-outline-primary" type="button" aria-label="Filtros y orden" title="Filtros y orden" aria-controls="catalog-filters" aria-expanded="false" hidden>
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 7h16M4 17h16M9 4v6m6 4v6"/></svg>
+  </button>
   </div>
   <p id="search-status" class="visually-hidden" role="status" aria-live="polite"></p>
 </div>
@@ -105,18 +110,6 @@
     </select>
   </div>
   {% endif %}
-  {% if genres %}
-  <fieldset class="filter-chips">
-    <legend class="fs-6">Géneros</legend>
-    <p class="small text-muted mb-2">Géneros de TMDB. Sin selección: todos.</p>
-    <div class="d-flex flex-wrap gap-2">
-      {% for genre in genres %}
-      <input class="btn-check" type="checkbox" id="genre-{{ loop.index }}" name="genre" value="{{ genre }}" {% if genre in filters.genre %}checked{% endif %}>
-      <label class="btn btn-outline-secondary rounded-pill" for="genre-{{ loop.index }}">{{ genre }}</label>
-      {% endfor %}
-    </div>
-  </fieldset>
-  {% endif %}
   <div class="d-flex flex-wrap gap-2">
     <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view, **({'watchlist': 1} if filters.get('watchlist') else {})) }}">Limpiar filtros</a>
   </div>
@@ -133,6 +126,7 @@
 </div>
 </details>
 <section class="catalog-content" aria-label="Resultados del catálogo">
+<div id="catalog-genres">{% include "genre_filter.html" %}</div>
 <div id="error" class="alert alert-danger mt-3" role="alert" hidden></div>
 <div id="card-results">
   {% include "cards.html" %}

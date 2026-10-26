@@ -1,0 +1,11 @@
+{% if genres %}
+<fieldset class="filter-chips mb-3">
+  <legend class="visually-hidden">Géneros</legend>
+  <div class="d-flex flex-wrap gap-2">
+    {% for genre in genres %}
+    <input class="btn-check" type="checkbox" form="filters" id="genre-{{ loop.index }}" name="genre" value="{{ genre }}" {% if genre in filters.genre %}checked{% endif %}>
+    <label class="btn btn-outline-secondary rounded-pill" for="genre-{{ loop.index }}">{{ genre }}</label>
+    {% endfor %}
+  </div>
+</fieldset>
+{% endif %}

@@ -5,6 +5,7 @@ const errorBox = document.querySelector("#error");
 const cardResults = document.querySelector("#card-results");
 const searchSpinner = document.querySelector("#search-spinner");
 const searchStatus = document.querySelector("#search-status");
+const genreControls = document.querySelector("#catalog-genres");
 let controller;
 let timer;
 let version = 0;
@@ -35,7 +36,7 @@ function parameters() {
   return params;
 }
 
-async function load(page = 1) {
+async function load(page = 1, scrollToTop = false) {
   clearTimeout(timer);
   controller?.abort();
   controller = new AbortController();
@@ -52,6 +53,12 @@ async function load(page = 1) {
     if (current !== version) return;
     const content = new DOMParser().parseFromString(data.html, "text/html");
     cardResults.replaceChildren(...content.body.childNodes);
+    if (genreControls && typeof data.genres_html === "string") {
+      const genres = new DOMParser().parseFromString(data.genres_html, "text/html");
+      genreControls.replaceChildren(...genres.body.childNodes);
+      params.delete("genre");
+      for (const genre of data.selected_genres) params.append("genre", genre);
+    }
     form.elements.page.value = data.page;
     params.set("page", data.page);
     const clear = document.querySelector("#clear-filters");
@@ -60,6 +67,7 @@ async function load(page = 1) {
     clear.href = clearUrl;
     history.replaceState(null, "", `${location.pathname}?${params}`);
     message = data.total === 1 ? "1 resultado" : `${data.total} resultados`;
+    if (scrollToTop) window.scrollTo({ top: 0, behavior: "instant" });
   } catch (error) {
     if (error.name !== "AbortError" && current === version) {
       errorBox.textContent = `No se pudo actualizar el catálogo. ${error.message}. Vuelve a intentarlo.`;
@@ -90,11 +98,14 @@ form.querySelector("#children-toggle")?.addEventListener("change", () => load())
 for (const input of form.querySelectorAll('.filter-chips input, .provider-options input, input[name="watched"], input[name="my_services"]')) {
   input.addEventListener("change", () => load());
 }
+genreControls?.addEventListener("change", (event) => {
+  if (event.target.matches('input[name="genre"]')) return load();
+});
 cardResults.addEventListener("click", (event) => {
   const link = event.target.closest(".card-pagination a");
   if (!link || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
   event.preventDefault();
-  load(Number(new URL(link.href).searchParams.get("page")));
+  return load(Number(new URL(link.href).searchParams.get("page")), true);
 });
 document.addEventListener("movie-state-changed", () => load(Number(form.elements.page.value)));
 updateChildrenCategories();
