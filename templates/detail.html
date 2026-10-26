@@ -64,6 +64,27 @@
       {{ banned_button(request.args.get('id'), record.banned, sync_csrf, filters, icon_only=true, responsive=true, kind=kind) }}
       {{ watchlist_button(kind, request.args.get('id'), record.watchlisted, sync_csrf, responsive=true) }}
     </div>
+    {% set kids_saved = get_flashed_messages(category_filter=['kids']) %}
+    {% if kids_saved %}<p class="alert alert-success mt-3 mb-0" role="status">{{ kids_saved[0] }}</p>{% endif %}
+    <details class="border rounded p-3 mt-3" {% if kids_saved %}open{% endif %}>
+      <summary>Categorías de Niños</summary>
+      <p class="small text-muted mt-2">Clasificación automática según la ficha TMDB. Puedes corregirla; un título puede estar en varias categorías. No garantiza que sea apto para todas las edades.</p>
+      <form method="post" action="{{ url_for('title_kids_categories', kind=kind, record_id=request.args.get('id'), **filters) }}" class="d-flex flex-column gap-2">
+        <input type="hidden" name="csrf" value="{{ sync_csrf }}">
+        {% for category in kids_categories %}
+        <div>
+          <label class="form-label mb-1" for="kids-mode-{{ category.id }}">{{ category.label }}{% if category.enabled %} <span class="badge text-bg-secondary">Incluido</span>{% endif %}</label>
+          <select class="form-select form-select-sm" id="kids-mode-{{ category.id }}" name="{{ category.id }}">
+            <option value="auto" {% if category.mode == 'auto' %}selected{% endif %}>Automático · {{ 'incluir' if category.automatic else 'no incluir' }}</option>
+            <option value="include" {% if category.mode == 'include' %}selected{% endif %}>Incluir</option>
+            <option value="exclude" {% if category.mode == 'exclude' %}selected{% endif %}>Excluir</option>
+          </select>
+        </div>
+        {% endfor %}
+        <p class="small text-muted mb-0">Incluir añade el título a Niños. Anime es exclusivo: sus títulos solo aparecen al seleccionar Anime, aunque tengan otras categorías. Excluir lo quita solo de esa categoría, no del resto de Niños. Los bloqueos se respetan y las correcciones se comparten entre sus versiones.</p>
+        <button class="btn btn-outline-primary align-self-start" type="submit">Guardar categorías</button>
+      </form>
+    </details>
     {% if fields %}
     <details id="provider-metadata" class="provider-metadata border rounded p-3 mt-4"
              {% if kind in ['movies', 'series'] and (content_metadata or {}).get('status') not in ['candidates', 'missing'] %}hidden{% endif %}>

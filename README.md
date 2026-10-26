@@ -677,9 +677,39 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
   si no hay imagen o falla, se muestra un aviso.
 - «Niños» tiene listados propios en `/kids/movies` y `/kids/series`,
   con los mismos filtros y portadas.
-  La selección infantil utiliza:
-  películas y series con géneros TMDB Familia o Animación
-  (también Family o Animation).
+  Incluye películas y series con géneros TMDB Familia o Animación
+  (también Family o Animation), más los títulos asignados a alguna de estas
+  cuatro categorías personales: **Superhéroes**, **Anime**, **Cine animado**
+  y **En familia**. Los botones aparecen antes de los géneros;
+  funcionan en películas y series, junto a búsqueda, filtros y paginación.
+  Un título puede pertenecer a varias categorías. `kids_category` acepta
+  `superheroes`, `anime`, `animation_hits` o `family` junto a `children=only`
+  en la API. Sin ese parámetro se muestra todo Niños.
+  La clasificación inicial utiliza únicamente asociaciones TMDB vigentes:
+  títulos, géneros, palabras clave, idioma, países y productoras. Anime requiere
+  animación y señales de origen asiático; Cine animado reúne Animación y
+  Familia, dejando el anime en su propia categoría. No exige un estudio
+  conocido, popularidad, recaudación ni valoración mínima. El identificador
+  interno `animation_hits` se conserva para no romper enlaces ni correcciones.
+  En familia combina Familia de acción real con comedias familiares reconocibles.
+  No se consultan servicios externos ni se sobrescriben categorías del proveedor.
+  **Anime es exclusivo**: la animación asiática clasificada allí queda oculta
+  en los listados normales, búsquedas, Mi lista, resultados por persona,
+  recomendaciones y otras categorías, incluso en «Todo» de Niños.
+  Solo aparece al seleccionar Anime (`children=only&kids_category=anime`).
+  No es un bloqueo y no elimina los géneros originales ni afecta la acción
+  real asiática. La clasificación manual de Anime permite corregir excepciones.
+  Las fichas siguen accesibles por enlace directo; estadísticas administrativas,
+  sincronización y exportaciones conservan el catálogo completo.
+  En cada ficha, **Categorías de Niños** permite elegir Automático, Incluir
+  o Excluir para cada categoría y guardar las correcciones en SQLite.
+  Estas sobreviven a la sincronización y se comparten entre versiones con la
+  misma asociación TMDB. Excluir afecta solo a esa categoría; no elimina el
+  título de otras categorías ni del grupo Familia/Animación original.
+  Los títulos bloqueados siguen ocultos. La sección es familiar amplia, **no
+  un control parental ni una garantía de edad**: puede contener anime adulto.
+  La ampliación de Niños no cambia el alcance del interruptor de contenido
+  infantil en los listados principales, que sigue usando Familia/Animación.
   Se incluyen todos los alfabetos. Se han quitado los textos explicativos sobre
   categorías y alfabetos de la interfaz, manteniendo los estados, errores y
   atribuciones de los servicios.

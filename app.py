@@ -13,7 +13,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from flask import Flask, abort, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image, PERFORMANCE_TIMINGS
 from xtream import CatalogError, XtreamClient
@@ -23,6 +23,7 @@ from tmdb_jobs import TMDBBatch
 from platforms import ordered_platforms
 from auth import configure_auth
 from updater import read_state, write_state
+from kids_categories import KIDS_CATEGORIES
 
 
 LABELS = {"movies": "Películas", "series": "Series"}
@@ -304,11 +305,33 @@ def create_app(db_path=None):
             values["tmdb_status"] = tmdb_status
         if eras:
             values["era"] = eras
+        kids_category = request.args.get("kids_category", "")
+        if kids_category:
+            if kids_category not in KIDS_CATEGORIES or (
+                children != "only" and request.endpoint != "kids_listing"
+            ):
+                abort(400, description="Categoría personal infantil inválida.")
+            values["kids_category"] = kids_category
         if "watchlist" in request.args:
             if request.args["watchlist"] not in {"0", "1"}:
                 abort(400, description="Filtro de lista inválido.")
             values["watchlist"] = int(request.args["watchlist"])
         return values
+
+    @app.post("/catalog/<kind>/<record_id>/kids-categories")
+    def title_kids_categories(kind, record_id):
+        if kind not in KINDS:
+            abort(404)
+        check_sync_csrf()
+        modes = {key: request.form.get(key) for key in KIDS_CATEGORIES}
+        if any(value not in {"auto", "include", "exclude"} for value in modes.values()):
+            abort(400, description="Selecciona Automático, Incluir o Excluir para cada categoría.")
+        filters = parameters()
+        filters.update(view=presentation(), page=page_number())
+        if not store.set_kids_categories(kind, record_id, modes):
+            abort(404, description="El título no existe en el catálogo local.")
+        flash("Categorías guardadas.", "kids")
+        return redirect(url_for("detail", kind=kind, id=record_id, **filters), code=303)
 
     @app.post("/catalog/<kind>/<record_id>/watchlist")
     def title_watchlist(kind, record_id):
@@ -429,7 +452,7 @@ def create_app(db_path=None):
                 item["category_id"] for item in categories
                 if item["category_name"].casefold() in {name.casefold() for name in CHILDREN_CATEGORIES[kind]}
             },
-            genres=genres, movie_eras=MOVIE_ERAS,
+            genres=genres, movie_eras=MOVIE_ERAS, kids_categories=KIDS_CATEGORIES,
             provider_options=provider_icons({"all": names})["all"],
             subscriptions=ordered_platforms(store.subscriptions()),
             selected_categories=filters["category"] if isinstance(filters["category"], list) else ([filters["category"]] if filters["category"] else []),
@@ -548,6 +571,7 @@ def create_app(db_path=None):
         response = app.make_response(render_template(
             "detail.html", record=record, fields=fields, trailer_url=trailer_url, people=people, category_links=category_links, kind=kind, image_url=image_url, backdrop_urls=backdrop_urls, filters=filters,
             content_metadata=store.tmdb_cached(kind, request.args.get("id", ""), "CA", fingerprint(record["data"])) if kind in {"movies", "series"} else None,
+            kids_categories=store.kids_categories(kind, request.args.get("id", "")),
             back_url=(
                 url_for("person_results", name=request.args["person"], view=filters["view"],
                         movies_page=page_number("movies_page"), series_page=page_number("series_page"))

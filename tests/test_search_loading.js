@@ -8,12 +8,13 @@ const { runInNewContext } = require("node:vm");
 
 const script = readFileSync(join(__dirname, "../static/catalog.js"), "utf8");
 
-function fixture() {
+function fixture(kids = false) {
   const listeners = {};
   const attributes = {};
   const scrolls = [];
   const genreUpdates = [];
   const urls = [];
+  const kidsTab = { href: "http://local/kids/series" };
   const cardResults = {
     setAttribute(name, value) { attributes[name] = value; },
     replaceChildren() {},
@@ -38,11 +39,23 @@ function fixture() {
     "#search-spinner": spinner, "#search-status": status,
     "#clear-filters": { href: "http://local/movies" },
     "#catalog-genres": genres,
+    "#kids-categories": kids ? {
+      addEventListener(type, callback) { listeners.kidsChange = callback; },
+    } : null,
   };
   let respond;
   const context = {
     URL, URLSearchParams,
-    FormData: class { *[Symbol.iterator]() { yield ["q", "harry"]; yield ["genre", "Old"]; } },
+    FormData: class {
+      *[Symbol.iterator]() {
+        yield ["q", "harry"];
+        yield ["genre", "Old"];
+        if (kids) {
+          yield ["children", "only"];
+          yield ["kids_category", "anime"];
+        }
+      }
+    },
     AbortController,
     DOMParser: class { parseFromString(html) { return { body: { childNodes: [html] } }; } },
     setTimeout: callback => { listeners.timer = callback; return 1; },
@@ -53,13 +66,16 @@ function fixture() {
     fetch: () => new Promise(resolve => { respond = resolve; }),
     document: {
       querySelector: selector => elements[selector] || null,
-      querySelectorAll: selector => (selector.includes('type="search"') ? [search] : []),
+      querySelectorAll: selector => {
+        if (selector.includes('type="search"')) return [search];
+        return kids && selector === "#kids-tabs a" ? [kidsTab] : [];
+      },
       addEventListener() {},
     },
   };
   runInNewContext(script, context);
   return {
-    attributes, spinner, status, listeners, scrolls, genreUpdates, urls,
+    attributes, spinner, status, listeners, scrolls, genreUpdates, urls, kidsTab,
     respond(total, extra = {}) { respond({ ok: true, json: async () => ({ html: "", page: 1, total, ...extra }) }); },
     fail() { respond({ ok: false, json: async () => ({ error: "Error de prueba" }) }); },
   };
@@ -128,4 +144,27 @@ test("updated genre choices replace old buttons and clear removed selections fro
     assert.deepEqual(url.searchParams.getAll("genre"), selected);
   }
   assert.equal(ui.genreUpdates.length, 2, "delegated genre events work after replacing the controls");
+});
+
+test("kids category chips refresh results and preserve their selection with pagination", async () => {
+  const ui = fixture(true);
+  const pending = ui.listeners.kidsChange({ target: { matches: () => true } });
+  assert.equal(ui.spinner.hidden, false);
+  ui.respond(60);
+  await pending;
+  let url = new URL(ui.urls.at(-1), "http://local");
+  assert.equal(url.searchParams.get("kids_category"), "anime");
+  assert.equal(url.searchParams.get("children"), "only");
+  assert.equal(new URL(ui.kidsTab.href).searchParams.get("kids_category"), "anime");
+  assert.equal(ui.scrolls.length, 0);
+  const next = ui.listeners.click({
+    target: { closest: () => ({ href: "http://local/kids/movies?page=2" }) },
+    preventDefault() {},
+  });
+  ui.respond(60, { page: 2 });
+  await next;
+  url = new URL(ui.urls.at(-1), "http://local");
+  assert.equal(url.searchParams.get("kids_category"), "anime");
+  assert.equal(url.searchParams.get("page"), "2");
+  assert.equal(ui.scrolls.length, 1);
 });

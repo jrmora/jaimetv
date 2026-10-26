@@ -57,7 +57,7 @@ class TMDBFilterTests(unittest.TestCase):
             ({"provider": ["Netflix"]}, ["Crimen", "Drama"]),
             ({"watched": "seen"}, []),
             ({"actor": "No such actor"}, []),
-            ({"children": "only"}, []),
+            ({"children": "only"}, ["Comedia", "Crimen", "Drama"]),
             ({"watchlist": True}, []),
         ):
             result = self.store.query("movies", include_genres=True, **filters)

@@ -65,6 +65,13 @@ async function load(page = 1, scrollToTop = false) {
     const clearUrl = new URL(clear.href);
     clearUrl.searchParams.set("children", params.get("children"));
     clear.href = clearUrl;
+    for (const link of document.querySelectorAll("#kids-tabs a")) {
+      const url = new URL(link.href);
+      const category = params.get("kids_category");
+      if (category) url.searchParams.set("kids_category", category);
+      else url.searchParams.delete("kids_category");
+      link.href = url;
+    }
     history.replaceState(null, "", `${location.pathname}?${params}`);
     message = data.total === 1 ? "1 resultado" : `${data.total} resultados`;
     if (scrollToTop) window.scrollTo({ top: 0, behavior: "instant" });
@@ -100,6 +107,9 @@ for (const input of form.querySelectorAll('.filter-chips input, .provider-option
 }
 genreControls?.addEventListener("change", (event) => {
   if (event.target.matches('input[name="genre"]')) return load();
+});
+document.querySelector("#kids-categories")?.addEventListener("change", (event) => {
+  if (event.target.matches('input[name="kids_category"]')) return load();
 });
 cardResults.addEventListener("click", (event) => {
   const link = event.target.closest(".card-pagination a");

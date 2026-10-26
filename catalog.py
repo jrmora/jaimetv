@@ -15,6 +15,7 @@ import pandas as pd
 
 from xtream import ACTIONS, CatalogError
 from platforms import platform_name
+from kids_categories import KIDS_CATEGORIES, automatic_kids_categories
 
 
 PERFORMANCE_TIMINGS: ContextVar[dict[str, float] | None] = ContextVar("catalog_performance_timings", default=None)
@@ -72,7 +73,7 @@ SYNC_CHANGE_LISTS = (
 SYNC_CHANGE_LIMIT = 500
 TITLE_INDEX_COLUMNS = (
     "kind", "record_id", "matched", "tmdb_id", "rating", "votes", "year", "people",
-    "search_text", "non_latin", "name_key", "title_key",
+    "search_text", "non_latin", "name_key", "title_key", "kids_categories",
 )
 
 
@@ -312,6 +313,16 @@ class CatalogStore:
                 )
             """)
             db.execute("""
+                CREATE TABLE IF NOT EXISTS kids_category_overrides (
+                    kind TEXT NOT NULL,
+                    record_id TEXT NOT NULL,
+                    category TEXT NOT NULL,
+                    enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (kind, record_id, category)
+                )
+            """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS sync_summary (
                     id INTEGER PRIMARY KEY CHECK (id = 1),
                     finished_at TEXT NOT NULL,
@@ -347,6 +358,7 @@ class CatalogStore:
                     non_latin INTEGER NOT NULL,
                     name_key TEXT NOT NULL,
                     title_key TEXT NOT NULL,
+                    kids_categories TEXT NOT NULL,
                     PRIMARY KEY (kind, record_id)
                 )
             """)
@@ -399,7 +411,8 @@ class CatalogStore:
                     CASE WHEN ({valid_rating_sql('payload')}) IS NOT NULL THEN json_extract(payload, '$.votes') END,
                     RELEASE_YEAR(json_extract(payload, '$.release_date')), people,
                     SEARCH_TEXT(name, payload, people), non_latin,
-                    CASEFOLD(name), CASEFOLD(json_extract(payload, '$.title'))
+                    CASEFOLD(name), CASEFOLD(json_extract(payload, '$.title')),
+                    KIDS_CATEGORIES(name, payload)
                 FROM resolved
             """, (kind, kind, kind))
         record_timing("refresh_index", started)
@@ -500,6 +513,70 @@ class CatalogStore:
 
     def _set_movie_state(self, table, record_id, enabled):
         return self._set_title_state(table, "movies", record_id, enabled)
+
+    def _prepare_kids_categories(self, db, kind):
+        db.execute(f"""CREATE TEMP TABLE kids_memberships AS
+            WITH automatic AS (
+                SELECT DISTINCT v.group_key, j.value AS category
+                FROM {kind}_versions v JOIN title_index i
+                    ON i.kind=? AND i.record_id=v.record_id
+                JOIN json_each(i.kids_categories) j
+            ), manual AS (
+                SELECT v.group_key, o.category, o.enabled,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY v.group_key, o.category ORDER BY o.updated_at DESC, o.record_id
+                    ) AS priority
+                FROM kids_category_overrides o JOIN {kind}_versions v ON v.record_id=o.record_id
+                WHERE o.kind=?
+            )
+            SELECT a.group_key, a.category FROM automatic a
+            WHERE NOT EXISTS (SELECT 1 FROM manual m
+                WHERE m.group_key=a.group_key AND m.category=a.category)
+            UNION
+            SELECT group_key, category FROM manual WHERE priority=1 AND enabled=1
+        """, (kind, kind))
+        db.execute("CREATE UNIQUE INDEX temp.idx_kids_memberships ON kids_memberships(group_key, category)")
+
+    def kids_categories(self, kind, record_id):
+        with self.connect() as db:
+            versions = self._title_versions(db, kind, record_id)
+            if not versions:
+                return None
+            automatic = set()
+            for item in versions:
+                automatic.update(json.loads(automatic_kids_categories(item["name"], item["payload"])))
+            ids = json.dumps([item["id"] for item in versions])
+            rows = db.execute("""
+                SELECT category, enabled FROM kids_category_overrides
+                WHERE kind=? AND record_id IN (SELECT value FROM json_each(?))
+                ORDER BY updated_at, record_id DESC
+            """, (kind, ids))
+            overrides = {row["category"]: bool(row["enabled"]) for row in rows}
+        return [
+            {"id": key, "label": label, "automatic": key in automatic,
+             "mode": ("include" if overrides[key] else "exclude") if key in overrides else "auto",
+             "enabled": overrides.get(key, key in automatic)}
+            for key, label in KIDS_CATEGORIES.items()
+        ]
+
+    def set_kids_categories(self, kind, record_id, modes):
+        if kind not in KINDS or set(modes) != set(KIDS_CATEGORIES) or any(
+            mode not in {"auto", "include", "exclude"} for mode in modes.values()
+        ):
+            raise ValueError("Categorías personales infantiles inválidas.")
+        with self.connect() as db:
+            versions = self._title_versions(db, kind, record_id)
+            if not versions:
+                return False
+            ids = [item["id"] for item in versions]
+            db.executemany("DELETE FROM kids_category_overrides WHERE kind=? AND record_id=?",
+                           [(kind, value) for value in ids])
+            now = datetime.now(timezone.utc).isoformat(timespec="microseconds")
+            db.executemany("INSERT INTO kids_category_overrides VALUES (?, ?, ?, ?, ?)", [
+                (kind, value, category, int(mode == "include"), now)
+                for value in ids for category, mode in modes.items() if mode != "auto"
+            ])
+        return True
 
     def _set_title_state(self, table, kind, record_id, enabled):
         with self.connect() as db:
@@ -643,6 +720,8 @@ class CatalogStore:
                 AND json_type(blocked.payload, '$.id')='integer'
         )"""
         with self.connect() as db:
+            self._prepare_title_versions(db, kind)
+            self._prepare_kids_categories(db, kind)
             rows = db.execute(f"""
                 SELECT s.{key} AS id, s.name, s.raw_json, m.payload,
                     EXISTS (SELECT 1 FROM watchlist saved WHERE saved.kind=m.kind
@@ -653,11 +732,14 @@ class CatalogStore:
                 FROM json_each(?) recommended
                 CROSS JOIN tmdb_metadata m
                 JOIN {table} s ON s.{key}=m.record_id
+                JOIN {kind}_versions versions ON versions.record_id=s.{key}
                 WHERE m.kind=? AND m.country='CA'
                     AND json_extract(m.payload, '$.status')='matched'
                     AND json_extract(m.payload, '$.id')=recommended.value
                     AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
                     AND json_extract(m.payload, '$.id')!=? {banned}
+                    AND NOT EXISTS (SELECT 1 FROM kids_memberships k
+                        WHERE k.group_key=versions.group_key AND k.category='anime')
                 ORDER BY CAST(recommended.key AS INTEGER), CASEFOLD(s.name), s.{key}
             """, (json.dumps(ids), kind, tmdb_id)).fetchall()
         items, seen = [], set()
@@ -697,6 +779,7 @@ class CatalogStore:
         db.create_function("RELEASE_YEAR", 1, release_year, deterministic=True)
         db.create_function("PEOPLE_METADATA", 2, effective_people, deterministic=True)
         db.create_function("SEARCH_TEXT", 3, search_text, deterministic=True)
+        db.create_function("KIDS_CATEGORIES", 2, automatic_kids_categories, deterministic=True)
         db.create_function(
             "HAS_GENRE", 2,
             lambda value, genre: genre.casefold() in {name.casefold() for name in people_names(value)},
@@ -739,7 +822,7 @@ class CatalogStore:
     def _delete_title(self, db, kind, record_id):
         table, _, key = KINDS[kind]
         db.execute(f"DELETE FROM {table} WHERE {key}=?", (record_id,))
-        for related in ("tmdb_metadata", "watchlist", "provider_removed"):
+        for related in ("tmdb_metadata", "watchlist", "provider_removed", "kids_category_overrides"):
             db.execute(f"DELETE FROM {related} WHERE kind=? AND record_id=?", (kind, record_id))
         for state in ("watched", "banned"):
             db.execute(f"DELETE FROM {state}_{kind} WHERE record_id=?", (record_id,))
@@ -889,6 +972,10 @@ class CatalogStore:
                 db.execute(
                     f"DELETE FROM provider_removed WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})", (kind,),
                 )
+                db.execute(
+                    f"DELETE FROM kids_category_overrides WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})",
+                    (kind,),
+                )
                 ids = json.dumps(sorted(listed[table]))
                 for row in db.execute(
                     f"""SELECT r.record_id, s.raw_json FROM provider_removed r JOIN {table} s ON s.{key}=r.record_id
@@ -978,12 +1065,14 @@ class CatalogStore:
                 names.setdefault(name.casefold(), name)
         return sorted(names.values(), key=str.casefold)
 
-    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", tmdb_status="all", era=None, watchlist=False, include_genres=False):
+    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", tmdb_status="all", era=None, watchlist=False, include_genres=False, kids_category=None):
         table, categories, key = KINDS[kind]
         if page is not None and (isinstance(page, bool) or not isinstance(page, int) or page < 1):
             raise ValueError("Página inválida.")
         if children not in {"all", "only", "exclude"}:
             raise ValueError("Filtro infantil inválido.")
+        if kids_category is not None and (kids_category not in KIDS_CATEGORIES or children != "only"):
+            raise ValueError("Categoría personal infantil inválida.")
         if sort_by not in SORT_COLUMNS or sort not in {"asc", "desc"}:
             raise ValueError("Orden inválido.")
         if access not in PROVIDER_ACCESS:
@@ -1063,7 +1152,18 @@ class CatalogStore:
                 SELECT 1 FROM json_each(score.payload, '$.genres')
                 WHERE CASEFOLD(value) IN ('familia', 'animación', 'family', 'animation')
             )"""
+            if children == "only":
+                membership = f"""({membership} OR EXISTS (
+                    SELECT 1 FROM kids_memberships k WHERE k.group_key=versions.group_key
+                ))"""
             conditions.insert(0, membership if children == "only" else f"NOT {membership}")
+        if kids_category:
+            conditions.append("""EXISTS (SELECT 1 FROM kids_memberships k
+                WHERE k.group_key=versions.group_key AND k.category=?)""")
+            params.append(kids_category)
+        if kids_category != "anime":
+            conditions.append("""NOT EXISTS (SELECT 1 FROM kids_memberships k
+                WHERE k.group_key=versions.group_key AND k.category='anime')""")
         if foreign is not None and children != "only" and kind in {"movies", "series"}:
             conditions.append("idx.non_latin = ?")
             params.append(int(bool(foreign)))
@@ -1133,6 +1233,7 @@ class CatalogStore:
             order = sort_name
         with self.connect() as db:
             self._prepare_title_versions(db, kind)
+            self._prepare_kids_categories(db, kind)
             if include_genres:
                 started = time.perf_counter()
                 # Facets ignore their own OR selection, but honor every other filter.
