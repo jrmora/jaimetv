@@ -9,6 +9,7 @@ const { runInNewContext } = require("node:vm");
 const script = readFileSync(join(__dirname, "../static/catalog.js"), "utf8");
 
 function fixture(kids = false) {
+  const kidsSelection = { values: kids ? ["anime", "family"] : [] };
   const listeners = {};
   const attributes = {};
   const scrolls = [];
@@ -52,7 +53,7 @@ function fixture(kids = false) {
         yield ["genre", "Old"];
         if (kids) {
           yield ["children", "only"];
-          yield ["kids_category", "anime"];
+          for (const value of kidsSelection.values) yield ["kids_category", value];
         }
       }
     },
@@ -68,6 +69,7 @@ function fixture(kids = false) {
       querySelector: selector => elements[selector] || null,
       querySelectorAll: selector => {
         if (selector.includes('type="search"')) return [search];
+        if (selector.includes('input[name="kids_category"]:checked')) return kidsSelection.values;
         return kids && selector === "#kids-tabs a" ? [kidsTab] : [];
       },
       addEventListener() {},
@@ -75,7 +77,7 @@ function fixture(kids = false) {
   };
   runInNewContext(script, context);
   return {
-    attributes, spinner, status, listeners, scrolls, genreUpdates, urls, kidsTab,
+    attributes, spinner, status, listeners, scrolls, genreUpdates, urls, kidsTab, kidsSelection,
     respond(total, extra = {}) { respond({ ok: true, json: async () => ({ html: "", page: 1, total, ...extra }) }); },
     fail() { respond({ ok: false, json: async () => ({ error: "Error de prueba" }) }); },
   };
@@ -156,6 +158,7 @@ test("kids category chips refresh results and preserve their selection with pagi
   assert.equal(url.searchParams.get("kids_category"), "anime");
   assert.equal(url.searchParams.get("children"), "only");
   assert.equal(new URL(ui.kidsTab.href).searchParams.get("kids_category"), "anime");
+  assert.deepEqual(new URL(ui.kidsTab.href).searchParams.getAll("kids_category"), ["anime", "family"]);
   assert.equal(ui.scrolls.length, 0);
   const next = ui.listeners.click({
     target: { closest: () => ({ href: "http://local/kids/movies?page=2" }) },
@@ -166,5 +169,17 @@ test("kids category chips refresh results and preserve their selection with pagi
   url = new URL(ui.urls.at(-1), "http://local");
   assert.equal(url.searchParams.get("kids_category"), "anime");
   assert.equal(url.searchParams.get("page"), "2");
+  assert.deepEqual(url.searchParams.getAll("kids_category"), ["anime", "family"]);
   assert.equal(ui.scrolls.length, 1);
+});
+
+test("the last active kids category cannot be deselected", () => {
+  const ui = fixture(true);
+  ui.kidsSelection.values = [];
+  const target = { checked: false, matches: () => true };
+  ui.listeners.kidsChange({ target });
+  assert.equal(target.checked, true);
+  assert.equal(ui.spinner.hidden, true);
+  assert.equal(ui.urls.length, 0);
+  assert.match(ui.status.textContent, /al menos una/);
 });

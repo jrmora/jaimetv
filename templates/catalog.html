@@ -130,9 +130,9 @@
 <fieldset class="filter-chips mb-3" id="kids-categories">
   <legend class="visually-hidden">Categorías personales de Niños</legend>
   <div class="d-flex flex-wrap gap-2">
-  {% for value, label in [('', 'Todo')] + kids_categories.items()|list %}
-    <input class="btn-check" type="radio" form="filters" name="kids_category" id="kids-{{ value or 'all' }}" value="{{ value }}" {% if filters.get('kids_category', '') == value %}checked{% endif %}>
-    <label class="btn btn-outline-primary rounded-pill" for="kids-{{ value or 'all' }}">{{ label }}</label>
+  {% for value, label in kids_categories.items() %}
+    <input class="btn-check" type="checkbox" form="filters" name="kids_category" id="kids-{{ value }}" value="{{ value }}" {% if value in filters.get('kids_category', []) %}checked{% endif %}>
+    <label class="btn btn-outline-primary rounded-pill" for="kids-{{ value }}">{{ label }}</label>
   {% endfor %}
   </div>
 </fieldset>

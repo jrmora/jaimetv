@@ -23,7 +23,7 @@ from tmdb_jobs import TMDBBatch
 from platforms import ordered_platforms
 from auth import configure_auth
 from updater import read_state, write_state
-from kids_categories import KIDS_CATEGORIES
+from kids_categories import DEFAULT_KIDS_CATEGORIES, KIDS_CATEGORIES
 
 
 LABELS = {"movies": "Películas", "series": "Series"}
@@ -305,13 +305,15 @@ def create_app(db_path=None):
             values["tmdb_status"] = tmdb_status
         if eras:
             values["era"] = eras
-        kids_category = request.args.get("kids_category", "")
-        if kids_category:
-            if kids_category not in KIDS_CATEGORIES or (
+        kids_categories = list(dict.fromkeys(request.args.getlist("kids_category")))
+        if kids_categories:
+            if any(value not in KIDS_CATEGORIES for value in kids_categories) or (
                 children != "only" and request.endpoint != "kids_listing"
             ):
                 abort(400, description="Categoría personal infantil inválida.")
-            values["kids_category"] = kids_category
+            values["kids_category"] = kids_categories
+        elif children == "only" or request.endpoint == "kids_listing":
+            values["kids_category"] = list(DEFAULT_KIDS_CATEGORIES)
         if "watchlist" in request.args:
             if request.args["watchlist"] not in {"0", "1"}:
                 abort(400, description="Filtro de lista inválido.")

@@ -9,6 +9,7 @@ KIDS_CATEGORIES = {
     "animation_hits": "Cine animado",
     "family": "En familia",
 }
+DEFAULT_KIDS_CATEGORIES = tuple(key for key in KIDS_CATEGORIES if key != "anime")
 
 
 def normalized(value):

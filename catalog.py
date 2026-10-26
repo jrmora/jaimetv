@@ -15,7 +15,7 @@ import pandas as pd
 
 from xtream import ACTIONS, CatalogError
 from platforms import platform_name
-from kids_categories import KIDS_CATEGORIES, automatic_kids_categories
+from kids_categories import DEFAULT_KIDS_CATEGORIES, KIDS_CATEGORIES, automatic_kids_categories
 
 
 PERFORMANCE_TIMINGS: ContextVar[dict[str, float] | None] = ContextVar("catalog_performance_timings", default=None)
@@ -1071,7 +1071,13 @@ class CatalogStore:
             raise ValueError("Página inválida.")
         if children not in {"all", "only", "exclude"}:
             raise ValueError("Filtro infantil inválido.")
-        if kids_category is not None and (kids_category not in KIDS_CATEGORIES or children != "only"):
+        selected_kids = (
+            list(DEFAULT_KIDS_CATEGORIES) if kids_category is None and children == "only"
+            else kids_category if isinstance(kids_category, list)
+            else [kids_category] if kids_category is not None else []
+        )
+        if ((kids_category is not None and (not selected_kids or children != "only"))
+                or any(value not in KIDS_CATEGORIES for value in selected_kids)):
             raise ValueError("Categoría personal infantil inválida.")
         if sort_by not in SORT_COLUMNS or sort not in {"asc", "desc"}:
             raise ValueError("Orden inválido.")
@@ -1157,11 +1163,12 @@ class CatalogStore:
                     SELECT 1 FROM kids_memberships k WHERE k.group_key=versions.group_key
                 ))"""
             conditions.insert(0, membership if children == "only" else f"NOT {membership}")
-        if kids_category:
+        if selected_kids:
             conditions.append("""EXISTS (SELECT 1 FROM kids_memberships k
-                WHERE k.group_key=versions.group_key AND k.category=?)""")
-            params.append(kids_category)
-        if kids_category != "anime":
+                WHERE k.group_key=versions.group_key
+                    AND k.category IN (SELECT value FROM json_each(?)))""")
+            params.append(json.dumps(selected_kids))
+        if "anime" not in selected_kids:
             conditions.append("""NOT EXISTS (SELECT 1 FROM kids_memberships k
                 WHERE k.group_key=versions.group_key AND k.category='anime')""")
         if foreign is not None and children != "only" and kind in {"movies", "series"}:

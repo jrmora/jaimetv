@@ -682,9 +682,13 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
   cuatro categorías personales: **Superhéroes**, **Anime**, **Cine animado**
   y **En familia**. Los botones aparecen antes de los géneros;
   funcionan en películas y series, junto a búsqueda, filtros y paginación.
+  Son botones combinables: inicialmente están activos Superhéroes, Cine animado
+  y En familia; Anime empieza desactivado. Se muestran títulos de cualquiera
+  de las categorías activas (O). Siempre debe quedar al menos una activa.
   Un título puede pertenecer a varias categorías. `kids_category` acepta
   `superheroes`, `anime`, `animation_hits` o `family` junto a `children=only`
-  en la API. Sin ese parámetro se muestra todo Niños.
+  en la API. Repite `kids_category` para combinar categorías. Sin ese parámetro
+  se aplican las tres categorías predeterminadas, sin Anime.
   La clasificación inicial utiliza únicamente asociaciones TMDB vigentes:
   títulos, géneros, palabras clave, idioma, países y productoras. Anime requiere
   animación y señales de origen asiático; Cine animado reúne Animación y
@@ -695,7 +699,7 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
   No se consultan servicios externos ni se sobrescriben categorías del proveedor.
   **Anime es exclusivo**: la animación asiática clasificada allí queda oculta
   en los listados normales, búsquedas, Mi lista, resultados por persona,
-  recomendaciones y otras categorías, incluso en «Todo» de Niños.
+  recomendaciones y otras categorías cuando Anime no está seleccionado.
   Solo aparece al seleccionar Anime (`children=only&kids_category=anime`).
   No es un bloqueo y no elimina los géneros originales ni afecta la acción
   real asiática. La clasificación manual de Anime permite corregir excepciones.

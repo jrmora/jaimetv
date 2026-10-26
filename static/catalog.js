@@ -67,9 +67,8 @@ async function load(page = 1, scrollToTop = false) {
     clear.href = clearUrl;
     for (const link of document.querySelectorAll("#kids-tabs a")) {
       const url = new URL(link.href);
-      const category = params.get("kids_category");
-      if (category) url.searchParams.set("kids_category", category);
-      else url.searchParams.delete("kids_category");
+      url.searchParams.delete("kids_category");
+      for (const category of params.getAll("kids_category")) url.searchParams.append("kids_category", category);
       link.href = url;
     }
     history.replaceState(null, "", `${location.pathname}?${params}`);
@@ -109,7 +108,13 @@ genreControls?.addEventListener("change", (event) => {
   if (event.target.matches('input[name="genre"]')) return load();
 });
 document.querySelector("#kids-categories")?.addEventListener("change", (event) => {
-  if (event.target.matches('input[name="kids_category"]')) return load();
+  if (!event.target.matches('input[name="kids_category"]')) return;
+  if (!document.querySelectorAll('#kids-categories input[name="kids_category"]:checked').length) {
+    event.target.checked = true;
+    if (searchStatus) searchStatus.textContent = "Debe quedar al menos una categoría activa.";
+    return;
+  }
+  return load();
 });
 cardResults.addEventListener("click", (event) => {
   const link = event.target.closest(".card-pagination a");

@@ -1,5 +1,6 @@
 import copy
 import json
+import re
 import tempfile
 import unittest
 from contextlib import contextmanager
@@ -111,6 +112,34 @@ class KidsCategoriesTests(unittest.TestCase):
         self.assertEqual(self.ids(kind="series", kids_category="anime"), set())
         # The main catalog's existing exclusion switch keeps its original meaning.
         self.assertIn("10", {row["id"] for row in self.store.query("movies", children="exclude")["items"]})
+
+    def test_multiple_categories_use_or_and_default_to_three_without_anime(self):
+        self.assertEqual(self.ids(kids_category=["superheroes", "family"]), {"10", "13", "15"})
+        self.assertEqual(self.ids(kids_category=["anime", "family"]), {"11", "13", "15"})
+        self.store.set_kids_categories("movies", "12", self.modes(superheroes="include"))
+        combined = self.store.query("movies", children="only",
+                                    kids_category=["superheroes", "animation_hits"], page=1)
+        self.assertEqual(combined["total"], 2)
+        self.assertEqual({row["id"] for row in combined["items"]}, {"10", "12"})
+        default = self.client.get("/kids/movies").get_data(as_text=True)
+        controls = re.findall(r'<input[^>]*name="kids_category"[^>]*>', default)
+        self.assertEqual(len(controls), 4)
+        self.assertTrue(all('type="checkbox"' in control for control in controls))
+        self.assertEqual(sum("checked" in control for control in controls), 3)
+        self.assertNotIn("checked", next(control for control in controls if 'value="anime"' in control))
+        self.assertNotIn('id="kids-all"', default)
+        url = "/api/catalog/movies?view=cards&children=only&kids_category=anime&kids_category=family"
+        data = self.client.get(url).json
+        self.assertEqual(data["total"], 3)
+        self.assertIn("kids_category=anime", data["html"])
+        self.assertIn("kids_category=family", data["html"])
+        detail = self.client.get(
+            "/catalog/movies/detail?id=11&children=only&kids_category=anime&kids_category=family"
+        ).get_data(as_text=True)
+        self.assertIn("kids_category=anime", detail)
+        self.assertIn("kids_category=family", detail)
+        with self.assertRaises(ValueError):
+            self.store.query("movies", children="only", kids_category=[])
 
     def test_categories_combine_with_filters_and_facets_and_keep_blocks(self):
         self.assertEqual(self.ids(kids_category="superheroes", genre="Drama"), set())
