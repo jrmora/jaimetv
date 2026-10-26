@@ -712,8 +712,16 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
   título de otras categorías ni del grupo Familia/Animación original.
   Los títulos bloqueados siguen ocultos. La sección es familiar amplia, **no
   un control parental ni una garantía de edad**: puede contener anime adulto.
-  La ampliación de Niños no cambia el alcance del interruptor de contenido
-  infantil en los listados principales, que sigue usando Familia/Animación.
+  En la ficha, **Pasar a contenido infantil** permite elegir una categoría y
+  pulsar **Pasar a Niños**, para películas y series. Se guarda como inclusión
+  manual y conserva las otras asignaciones. Las inclusiones manuales también
+  cuentan como infantiles en el interruptor de los listados principales:
+  se ocultan hasta activar «Mostrar contenido infantil», además de los géneros
+  Familia/Animación. Los títulos clasificados automáticamente como superhéroes
+  no se retiran del catálogo normal solo por esa clasificación.
+  Para deshacer un traslado manual, cambia las categorías incluidas a
+  Automático o Excluir desde la misma ficha. Los géneros Familia/Animación
+  originales siguen contando como infantiles. Anime mantiene su exclusividad.
   Se incluyen todos los alfabetos. Se han quitado los textos explicativos sobre
   categorías y alfabetos de la interfaz, manteniendo los estados, errores y
   atribuciones de los servicios.

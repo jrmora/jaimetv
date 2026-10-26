@@ -325,14 +325,27 @@ def create_app(db_path=None):
         if kind not in KINDS:
             abort(404)
         check_sync_csrf()
-        modes = {key: request.form.get(key) for key in KIDS_CATEGORIES}
+        action = request.form.get("action", "save")
+        if action not in {"save", "move"}:
+            abort(400, description="Acción de contenido infantil inválida.")
+        if action == "move":
+            category = request.form.get("kids_target")
+            if category not in KIDS_CATEGORIES:
+                abort(400, description="Selecciona una categoría de Niños.")
+            current = store.kids_categories(kind, record_id)
+            if current is None:
+                abort(404, description="El título no existe en el catálogo local.")
+            modes = {item["id"]: item["mode"] for item in current}
+            modes[category] = "include"
+        else:
+            modes = {key: request.form.get(key) for key in KIDS_CATEGORIES}
         if any(value not in {"auto", "include", "exclude"} for value in modes.values()):
             abort(400, description="Selecciona Automático, Incluir o Excluir para cada categoría.")
         filters = parameters()
         filters.update(view=presentation(), page=page_number())
         if not store.set_kids_categories(kind, record_id, modes):
             abort(404, description="El título no existe en el catálogo local.")
-        flash("Categorías guardadas.", "kids")
+        flash("Título pasado a contenido infantil." if action == "move" else "Categorías guardadas.", "kids")
         return redirect(url_for("detail", kind=kind, id=record_id, **filters), code=303)
 
     @app.post("/catalog/<kind>/<record_id>/watchlist")

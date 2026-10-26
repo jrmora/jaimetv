@@ -298,6 +298,57 @@ class KidsCategoriesTests(unittest.TestCase):
         with self.store.connect() as db:
             self.assertEqual(db.execute("SELECT COUNT(*) FROM kids_category_overrides").fetchone()[0], 0)
 
+    def test_move_from_detail_for_movies_and_series_and_undo(self):
+        for kind, record_id in (("movies", "14"), ("series", "20")):
+            self.cache(record_id, kind=kind, genres=["Drama"])
+            url = f"/catalog/{kind}/{record_id}/kids-categories"
+            detail = self.client.get(f"/catalog/{kind}/detail?id={record_id}").get_data(as_text=True)
+            self.assertIn("Pasar a contenido infantil", detail)
+            self.assertIn('name="kids_target"', detail)
+            with self.client.session_transaction() as session:
+                csrf = session["sync_csrf"]
+            response = self.client.post(url, data={"csrf": csrf, "action": "move", "kids_target": "family"})
+            self.assertEqual(response.status_code, 303)
+            self.assertIn("Título pasado a contenido infantil.", self.client.get(response.location).get_data(as_text=True))
+            self.assertIn(record_id, self.ids(kind=kind, kids_category="family"))
+            self.assertNotIn(record_id, {row["id"] for row in self.store.query(kind, children="exclude")["items"]})
+            self.assertIn(record_id, {row["id"] for row in self.store.query(kind, children="all")["items"]})
+            reopened = CatalogStore(self.path)
+            self.assertNotIn(record_id, {row["id"] for row in reopened.query(kind, children="exclude")["items"]})
+            self.store.set_kids_categories(kind, record_id, self.modes())
+            self.assertIn(record_id, {row["id"] for row in self.store.query(kind, children="exclude")["items"]})
+
+    def test_move_validation_shared_versions_and_existing_preferences(self):
+        self.cache("14", id=10, title="Avengers", genres=["Acción"])
+        self.store.set_kids_categories("movies", "14", self.modes(animation_hits="exclude"))
+        self.store.set_watched("movies", "10", True)
+        self.store.set_watchlisted("movies", "10", True)
+        self.client.get("/catalog/movies/detail?id=14")
+        with self.client.session_transaction() as session:
+            csrf = session["sync_csrf"]
+        url = "/catalog/movies/14/kids-categories"
+        data = {"csrf": csrf, "action": "move", "kids_target": "superheroes"}
+        self.assertEqual(self.client.post(url, data={**data, "csrf": ""}).status_code, 400)
+        self.assertEqual(self.client.post(url, data={**data, "kids_target": "invalid"}).status_code, 400)
+        self.assertEqual(self.client.post(url, data={**data, "action": "invalid"}).status_code, 400)
+        self.assertEqual(self.client.post("/catalog/movies/999/kids-categories", data=data).status_code, 404)
+        self.assertEqual(self.client.post(url, data=data).status_code, 303)
+        for record_id in ("10", "14"):
+            settings = {item["id"]: item for item in self.store.kids_categories("movies", record_id)}
+            self.assertEqual(settings["superheroes"]["mode"], "include")
+            self.assertEqual(settings["animation_hits"]["mode"], "exclude")
+            detail = self.store.detail("movies", record_id)
+            self.assertTrue(detail["watched"])
+            self.assertTrue(detail["watchlisted"])
+            self.assertFalse(detail["banned"])
+        self.assertNotIn("10", {row["id"] for row in self.store.query("movies", children="exclude")["items"]})
+        self.store.replace(self.data)
+        self.assertNotIn("10", {row["id"] for row in self.store.query("movies", children="exclude")["items"]})
+        self.store.set_banned("movies", "10", True)
+        self.assertEqual(self.client.post(url, data=data).status_code, 303)
+        self.assertTrue(self.store.detail("movies", "10")["banned"])
+        self.assertNotIn("10", self.ids(kids_category="superheroes"))
+
     def test_web_controls_api_pagination_and_preserved_detail_filters(self):
         for kind in ("movies", "series"):
             response = self.client.get(f"/kids/{kind}?kids_category=superheroes")

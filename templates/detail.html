@@ -66,6 +66,21 @@
     </div>
     {% set kids_saved = get_flashed_messages(category_filter=['kids']) %}
     {% if kids_saved %}<p class="alert alert-success mt-3 mb-0" role="status">{{ kids_saved[0] }}</p>{% endif %}
+    <form method="post" action="{{ url_for('title_kids_categories', kind=kind, record_id=request.args.get('id'), **filters) }}" class="border rounded p-3 mt-3">
+      <input type="hidden" name="csrf" value="{{ sync_csrf }}">
+      <input type="hidden" name="action" value="move">
+      <label class="form-label" for="kids-target">Pasar a contenido infantil</label>
+      <div class="d-flex flex-wrap gap-2">
+        <select class="form-select w-auto" id="kids-target" name="kids_target" required>
+          <option value="">Elige una categoría…</option>
+          {% for category in kids_categories %}
+          <option value="{{ category.id }}">{{ category.label }}</option>
+          {% endfor %}
+        </select>
+        <button class="btn btn-outline-primary" type="submit">Pasar a Niños</button>
+      </div>
+      <p class="small text-muted mt-2 mb-0">Se oculta del catálogo normal salvo al activar «Mostrar contenido infantil». Anime solo aparece al activar su categoría. No se desbloquean títulos bloqueados.</p>
+    </form>
     <details class="border rounded p-3 mt-3" {% if kids_saved %}open{% endif %}>
       <summary>Categorías de Niños</summary>
       <p class="small text-muted mt-2">Clasificación automática según la ficha TMDB. Puedes corregirla; un título puede estar en varias categorías. No garantiza que sea apto para todas las edades.</p>
@@ -81,7 +96,7 @@
           </select>
         </div>
         {% endfor %}
-        <p class="small text-muted mb-0">Incluir añade el título a Niños. Anime es exclusivo: sus títulos solo aparecen al seleccionar Anime, aunque tengan otras categorías. Excluir lo quita solo de esa categoría, no del resto de Niños. Los bloqueos se respetan y las correcciones se comparten entre sus versiones.</p>
+        <p class="small text-muted mb-0">Incluir añade el título a Niños y lo oculta cuando «Mostrar contenido infantil» está desactivado. Para deshacer el traslado manual, cambia las categorías incluidas a Automático o Excluir; los géneros Familia/Animación siguen contando como infantiles. Anime es exclusivo: sus títulos solo aparecen al seleccionar Anime. Los bloqueos se respetan y las correcciones se comparten entre sus versiones.</p>
         <button class="btn btn-outline-primary align-self-start" type="submit">Guardar categorías</button>
       </form>
     </details>

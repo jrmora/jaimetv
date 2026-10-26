@@ -529,11 +529,11 @@ class CatalogStore:
                 FROM kids_category_overrides o JOIN {kind}_versions v ON v.record_id=o.record_id
                 WHERE o.kind=?
             )
-            SELECT a.group_key, a.category FROM automatic a
+            SELECT a.group_key, a.category, 0 AS manual FROM automatic a
             WHERE NOT EXISTS (SELECT 1 FROM manual m
                 WHERE m.group_key=a.group_key AND m.category=a.category)
             UNION
-            SELECT group_key, category FROM manual WHERE priority=1 AND enabled=1
+            SELECT group_key, category, 1 AS manual FROM manual WHERE priority=1 AND enabled=1
         """, (kind, kind))
         db.execute("CREATE UNIQUE INDEX temp.idx_kids_memberships ON kids_memberships(group_key, category)")
 
@@ -1161,6 +1161,11 @@ class CatalogStore:
             if children == "only":
                 membership = f"""({membership} OR EXISTS (
                     SELECT 1 FROM kids_memberships k WHERE k.group_key=versions.group_key
+                ))"""
+            else:
+                membership = f"""({membership} OR EXISTS (
+                    SELECT 1 FROM kids_memberships k
+                    WHERE k.group_key=versions.group_key AND k.manual=1
                 ))"""
             conditions.insert(0, membership if children == "only" else f"NOT {membership}")
         if selected_kids:
