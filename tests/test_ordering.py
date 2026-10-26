@@ -31,3 +31,17 @@ class OrderingTests(unittest.TestCase):
     def test_invalid_combined_order_is_rejected(self):
         for value in ("name", "name:invalid", "invalid:asc", ":desc"):
             self.assertEqual(self.client.get("/movies", query_string={"ordering": value}).status_code, 400)
+
+    def test_votes_option_only_offers_most_voted_first(self):
+        for path in ("/movies", "/series", "/kids/movies", "/kids/series"):
+            with self.subTest(path=path):
+                page = self.client.get(f"{path}?ordering=votes:desc")
+                self.assertEqual(page.status_code, 200)
+                html = page.get_data(as_text=True)
+                self.assertIn('value="votes:desc" selected', html)
+                self.assertIn("Votos · Más votadas primero", html)
+                self.assertNotIn('value="votes:asc"', html)
+        combined = self.client.get("/api/catalog/movies?ordering=votes:desc")
+        legacy = self.client.get("/api/catalog/movies?sort_by=votes&sort=desc")
+        self.assertEqual(combined.status_code, 200)
+        self.assertEqual(combined.json["items"], legacy.json["items"])

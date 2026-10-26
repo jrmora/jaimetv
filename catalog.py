@@ -36,6 +36,9 @@ SORT_COLUMNS = {
     "category_name": "CASEFOLD(COALESCE(c.category_name, 'Sin categoría'))",
     "year": "CAST(NULLIF(s.year, '') AS INTEGER)",
     "rating": "s.rating",
+    "votes": """CASE WHEN json_type(score.payload, '$.votes')='integer'
+        AND json_extract(score.payload, '$.votes')>=0
+        THEN json_extract(score.payload, '$.votes') END""",
 }
 CATEGORY_TABLES = ("vod_categories", "series_categories")
 

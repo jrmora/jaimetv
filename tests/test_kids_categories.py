@@ -305,11 +305,17 @@ class KidsCategoriesTests(unittest.TestCase):
             detail = self.client.get(f"/catalog/{kind}/detail?id={record_id}").get_data(as_text=True)
             self.assertIn("Pasar a contenido infantil", detail)
             self.assertIn('name="kids_target"', detail)
+            self.assertIn('<summary class="small text-muted">Clasificación infantil</summary>', detail)
+            for panel in ("kids-classification", "kids-category-settings"):
+                self.assertNotIn("open", re.search(fr'<details id="{panel}"[^>]*>', detail).group())
             with self.client.session_transaction() as session:
                 csrf = session["sync_csrf"]
             response = self.client.post(url, data={"csrf": csrf, "action": "move", "kids_target": "family"})
             self.assertEqual(response.status_code, 303)
-            self.assertIn("Título pasado a contenido infantil.", self.client.get(response.location).get_data(as_text=True))
+            saved = self.client.get(response.location).get_data(as_text=True)
+            self.assertIn("Título pasado a contenido infantil.", saved)
+            for panel in ("kids-classification", "kids-category-settings"):
+                self.assertNotIn("open", re.search(fr'<details id="{panel}"[^>]*>', saved).group())
             self.assertIn(record_id, self.ids(kind=kind, kids_category="family"))
             self.assertNotIn(record_id, {row["id"] for row in self.store.query(kind, children="exclude")["items"]})
             self.assertIn(record_id, {row["id"] for row in self.store.query(kind, children="all")["items"]})

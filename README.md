@@ -73,6 +73,9 @@ indican «Pocos votos» cuando hay menos de 100.
 En caso de empate en la puntuación ponderada,
 año descendente (más recientes primero). Los valores ausentes quedan al final.
 Puedes cambiar el orden desde los filtros.
+La opción «Votos · Más votadas primero» ordena películas y series por el número
+total de votos en TMDB, de mayor a menor, independientemente de su nota.
+Los recuentos ausentes o inválidos quedan al final; los empates se ordenan por nombre.
 Las notas de tarjetas y del ordenamiento son exclusivamente de TMDB:
 coincidencia confirmada, caché vigente de Canadá, nota numérica de 0 a 10 y
 al menos un voto. Sin esos datos se muestra «—», nunca la nota del proveedor.
@@ -705,14 +708,17 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
   real asiática. La clasificación manual de Anime permite corregir excepciones.
   Las fichas siguen accesibles por enlace directo; estadísticas administrativas,
   sincronización y exportaciones conservan el catálogo completo.
-  En cada ficha, **Categorías de Niños** permite elegir Automático, Incluir
+  En cada ficha, **Clasificación infantil → Ajustes avanzados de categorías**
+  permite elegir Automático, Incluir
   o Excluir para cada categoría y guardar las correcciones en SQLite.
   Estas sobreviven a la sincronización y se comparten entre versiones con la
   misma asociación TMDB. Excluir afecta solo a esa categoría; no elimina el
   título de otras categorías ni del grupo Familia/Animación original.
   Los títulos bloqueados siguen ocultos. La sección es familiar amplia, **no
   un control parental ni una garantía de edad**: puede contener anime adulto.
-  En la ficha, **Pasar a contenido infantil** permite elegir una categoría y
+  La opción **Clasificación infantil** está plegada por defecto, también tras
+  guardar, para no ocupar espacio en el uso habitual. Al desplegarla,
+  **Pasar a contenido infantil** permite elegir una categoría y
   pulsar **Pasar a Niños**, para películas y series. Se guarda como inclusión
   manual y conserva las otras asignaciones. Las inclusiones manuales también
   cuentan como infantiles en el interruptor de los listados principales:
@@ -815,7 +821,7 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
   se ordenan numéricamente y los valores ausentes quedan al final en ambos sentidos.
 - Los formularios, ordenamiento y paginación funcionan también sin JavaScript.
 - `/api/catalog/movies`, `/api/catalog/series`: JSON
-  filtrable con `q`, `actor`, `director`, `category`, `sort_by` (`name`, `category_name`, `year`, `rating`),
+  filtrable con `q`, `actor`, `director`, `category`, `sort_by` (`name`, `category_name`, `year`, `rating`, `votes`),
   `sort` (`asc`/`desc`), `children`, `foreign` y `view` (`table`/`cards`).
   Por compatibilidad con clientes programáticos, la API conserva su respuesta
   sin paginar por defecto (`view=table`): devuelve `items` y `total`, y se ignora

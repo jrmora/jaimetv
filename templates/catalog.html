@@ -86,6 +86,7 @@
       <option value="{{ column }}:{{ direction }}" {% if filters.sort_by == column and filters.sort == direction %}selected{% endif %}>{{ label }} · {{ description }}</option>
       {% endfor %}
       {% endfor %}
+      <option value="votes:desc" {% if filters.sort_by == 'votes' and filters.sort == 'desc' %}selected{% endif %}>Votos · Más votadas primero</option>
     </select>
   </div>
   {% if kids %}

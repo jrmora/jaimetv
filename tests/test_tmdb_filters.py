@@ -241,6 +241,24 @@ class TMDBFilterTests(unittest.TestCase):
         self.assertEqual(result["total"], 4)
         self.assertTrue(all(item["rating"] is None and item["votes"] is None for item in result["items"]))
 
+    def test_votes_order_ignores_rating_and_keeps_unknown_counts_last(self):
+        for kind, key in (("movies", "stream_id"), ("series", "series_id")):
+            with self.subTest(kind=kind):
+                data = snapshot()
+                data[kind] = [{key: number, "name": f"Title {number}"} for number in range(1, 10)]
+                self.store.replace(data)
+                for number, score, votes in (
+                    (1, 10, 5), (2, 1, 2000), (3, 9, 100), (4, None, 3000),
+                    (5, 0, 100), (6, 8, 0), (7, 8, None), (8, 8, -1), (9, 8, "9999"),
+                ):
+                    self.cache(kind, str(number), rating=score, votes=votes)
+                result = self.store.query(kind, sort_by="votes", sort="desc", page=1)
+                expected = ["4", "2", "3", "5", "1", "6", "7", "8", "9"]
+                self.assertEqual([item["id"] for item in result["items"]], expected)
+                response = self.client.get(f"/api/catalog/{kind}?children=all&watched=all&ordering=votes:desc")
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual([item["id"] for item in response.json["items"]], expected)
+
     def test_unified_search_matches_title_actor_or_director(self):
         self.data["movies"] = [
             {"stream_id": 10, "name": "Corazón valiente"},
