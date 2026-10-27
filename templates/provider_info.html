@@ -10,28 +10,54 @@
 {% endif %}
 {% endmacro %}
 
-{% macro technical(data, show_missing_audio=true) %}
-{{ field_table(data.fields) }}
-{% if data.audio or show_missing_audio %}
-<h3 class="h6">Audio declarado</h3>
-{% for track in data.audio %}
-{% if data.audio|length > 1 %}<p class="small mb-1">Pista {{ loop.index }}</p>{% endif %}
-{{ field_table(track) }}
-{% else %}
-<p class="small text-muted">Idioma no informado. El proveedor no describe las pistas de audio de esta copia.</p>
-{% endfor %}
+{% macro track_details(label, tracks) %}
+{% if tracks %}
+<details class="mt-2 mb-3 provider-track-details">
+  <summary class="small">{{ label }} ({{ tracks|length }})</summary>
+  <div class="mt-2">
+  {% for track in tracks %}
+  {% if tracks|length > 1 %}<p class="small text-muted mb-1">Pista {{ loop.index }}</p>{% endif %}
+  {{ field_table(track) }}
+  {% endfor %}
+  </div>
+</details>
 {% endif %}
-{% for label, tracks in [('Vídeo', data.video), ('Subtítulos declarados', data.subtitles)] %}
-{% if tracks %}<h3 class="h6">{{ label }}</h3>{% endif %}
-{% for track in tracks %}{{ field_table(track) }}{% endfor %}
+{% endmacro %}
+
+{% macro technical(data, show_missing_audio=true) %}
+<table class="table table-sm tmdb-details-table mb-2">
+<tbody>
+{% if data.audio or show_missing_audio %}
+<tr><th scope="row">Audio declarado</th><td>
+{% for language, tracks in data.audio|groupby('0.value') %}
+<span class="d-block">{{ language }} · {{ tracks|length }} {{ 'pista' if tracks|length == 1 else 'pistas' }}</span>
+{% else %}Idioma no informado. No permite confirmar ni descartar audio en español.
 {% endfor %}
+</td></tr>
+{% endif %}
+{% if data.subtitles or show_missing_audio %}
+<tr><th scope="row">Subtítulos declarados</th><td>
+{% for language, tracks in data.subtitles|groupby('0.value') %}
+<span class="d-block">{{ language }} · {{ tracks|length }} {{ 'pista' if tracks|length == 1 else 'pistas' }}</span>
+{% else %}No informados por el proveedor.
+{% endfor %}
+</td></tr>
+{% endif %}
+{% for field in data.fields %}
+<tr><th scope="row">{{ field.label }}</th><td>{{ field.value }}{% if field.label == 'Tasa de bits' %}<span class="d-block small text-muted">Unidad no informada</span>{% endif %}</td></tr>
+{% endfor %}
+</tbody>
+</table>
+{{ track_details('Detalles de pistas de audio', data.audio) }}
+{{ track_details('Detalles de vídeo', data.video) }}
+{{ track_details('Detalles de pistas de subtítulos', data.subtitles) }}
 {% endmacro %}
 
 {% set provider_errors = get_flashed_messages(category_filter=['provider-error']) %}
 {% set provider_success = get_flashed_messages(category_filter=['provider-success']) %}
 <details id="provider-info" class="border rounded p-3 mb-4" {% if provider_errors or provider_success %}open{% endif %}>
   <summary>Información de la copia del proveedor</summary>
-  <p class="small text-muted mt-2">Datos declarados por tu proveedor, no por TMDB. Pueden estar incompletos o describir solo una pista; no garantizan todos los audios disponibles. No se inspecciona ni reproduce el vídeo.</p>
+  <p class="small text-muted mt-2">Datos técnicos declarados para esta copia; pueden estar incompletos. Los subtítulos no confirman el audio. No se inspecciona ni reproduce el vídeo.</p>
   {% for message in provider_errors %}<p class="alert alert-warning" role="alert">{{ message }}</p>{% endfor %}
   {% for message in provider_success %}<p class="alert alert-success" role="status">{{ message }}</p>{% endfor %}
   <p class="small">Copia actual: <strong>{{ record.data.get('name') or record.data.get('title') or record.name }}</strong> · ID {{ request.args.get('id') }}</p>
@@ -53,7 +79,7 @@
   {% for season in provider_metadata.data.seasons %}
   <details class="mb-2"><summary>Temporada {{ season.number }} · Información declarada</summary>{{ field_table(season.fields) }}</details>
   {% endfor %}
-  <h3 class="h6 mt-3">Episodios ({{ provider_metadata.data.episodes|length }})</h3>
+  <h3 class="h6 mt-3">Copias de episodios ({{ provider_metadata.data.episodes|length }})</h3>
   <p class="small text-muted">El audio puede variar de un episodio a otro. Abre cada episodio para ver sus datos.</p>
   {% for episode in provider_metadata.data.episodes %}
   <details class="mb-2">
@@ -82,11 +108,14 @@
       {% endfor %}
     </select>
     {% endif %}
-    <div class="form-check mb-2">
+    <details class="mb-3">
+      <summary class="small text-muted">Opciones de diagnóstico (temporal)</summary>
+    <div class="form-check mt-2 mb-2">
       <input type="checkbox" class="form-check-input" id="provider-diagnostic" name="provider_diagnostic" value="1">
       <label class="form-check-label small" for="provider-diagnostic">Guardar JSON de diagnóstico (temporal)</label>
     </div>
-    <p class="small text-muted">La consulta se ejecuta en el servidor de la aplicación. Marca esta opción para revisar su respuesta completa, con datos privados ocultos. Una actualización correcta sin marcarla elimina el JSON anterior.</p>
+    <p class="small text-muted mb-0">La consulta se ejecuta en el servidor de la aplicación. Marca esta opción para revisar su respuesta completa, con datos privados ocultos. Una actualización correcta sin marcarla elimina el JSON anterior.</p>
+    </details>
     <button type="submit" class="btn btn-outline-secondary">{{ 'Actualizar proveedor' if provider_metadata else 'Consultar proveedor' }}</button>
   </form>
 </details>

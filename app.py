@@ -24,7 +24,7 @@ from platforms import ordered_platforms
 from auth import configure_auth
 from updater import read_state, write_state
 from kids_categories import DEFAULT_KIDS_CATEGORIES, KIDS_CATEGORIES
-from provider_info import normalize_provider_info, provider_fingerprint, provider_diagnostic
+from provider_info import normalize_provider_info, provider_fingerprint, provider_diagnostic, provider_presentation
 
 
 LABELS = {"movies": "Películas", "series": "Series"}
@@ -621,11 +621,14 @@ def create_app(db_path=None):
             url = valid_image(candidate)
             if url and url != image_url and url not in backdrop_urls:
                 backdrop_urls.append(url)
+        provider_metadata = store.provider_cached(kind, request.args.get("id", ""), provider_fingerprint(record["data"]))
+        if provider_metadata:
+            provider_metadata["data"] = provider_presentation(provider_metadata["data"], kind)
         response = app.make_response(render_template(
             "detail.html", record=record, fields=fields, trailer_url=trailer_url, people=people, category_links=category_links, kind=kind, image_url=image_url, backdrop_urls=backdrop_urls, filters=filters,
             content_metadata=store.tmdb_cached(kind, request.args.get("id", ""), "CA", fingerprint(record["data"])) if kind in {"movies", "series"} else None,
             kids_categories=store.kids_categories(kind, request.args.get("id", "")),
-            provider_metadata=store.provider_cached(kind, request.args.get("id", ""), provider_fingerprint(record["data"])),
+            provider_metadata=provider_metadata,
             back_url=(
                 url_for("person_results", name=request.args["person"], view=filters["view"],
                         movies_page=page_number("movies_page"), series_page=page_number("series_page"))

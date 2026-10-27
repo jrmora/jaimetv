@@ -11,6 +11,7 @@ td { overflow-wrap: anywhere; }
 .detail-actions button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
 .kids-classification, .kids-classification .form-select { min-width: 0; }
 #provider-info, #provider-info .form-select { min-width: 0; overflow-wrap: anywhere; }
+#provider-info .form-select { max-width: 100%; text-overflow: ellipsis; }
 #provider-diagnostic-json { max-height: 28rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 599.98px) {
   .detail-action-label { display: none; }

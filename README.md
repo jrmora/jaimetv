@@ -26,13 +26,24 @@ con las credenciales Xtream ya configuradas. No necesita JavaScript ni inspeccio
 reproduce o descarga el vídeo. Abrir la ficha o desplegar el panel no consulta
 al proveedor.
 
-La tabla muestra los campos disponibles: duración, formato, tasa de bits,
-sinopsis y datos de vídeo/audio declarados (códec, resolución, canales e idioma).
-En series también se muestran temporadas y episodios, con datos técnicos por
-episodio. Un episodio no determina los audios del resto de la serie.
+La tabla solo muestra información propia de la copia: duración del archivo
+(puede diferir de la duración de la obra en TMDB), formato, tamaño, tasa de bits
+y pistas de audio/subtítulos declaradas. No repite títulos, sinopsis, géneros,
+reparto, dirección, estrenos ni valoraciones. No se inventan unidades cuando
+el proveedor no las indica. La duración en segundos solo aparece si no hay
+una duración textual, evitando duplicarla.
+Los idiomas se resumen con el número de pistas; índices, códecs, resolución
+y canales quedan en desplegables técnicos. En series se muestran las temporadas
+y copias de episodios que ofrece el proveedor, con datos técnicos por episodio.
+Un episodio no determina los audios del resto de la serie.
 **Idioma no informado** no significa «solo inglés» ni «sin español».
 Estos datos pueden describir una sola pista y no certifican todos los idiomas
 disponibles: no se deducen a partir de TMDB, el nombre o la categoría.
+Las pistas de `subtitles` se muestran como subtítulos declarados, conservando
+su índice: tener subtítulos en español no confirma que exista audio en español.
+Las fichas guardadas con versiones anteriores se adaptan al abrirlas, sin
+consultas externas. Si hay un JSON de diagnóstico guardado, se reinterpretan
+también sus campos con el formato actual (por ejemplo, `subtitles`).
 
 Solo se guarda una selección de campos informativos en `provider_metadata`,
 con fecha UTC e identidad del registro; no se guarda ni muestra el JSON técnico
@@ -42,7 +53,8 @@ si varias versiones comparten una asociación TMDB. El selector permite consulta
 otra copia y los enlaces permiten ver sus datos guardados.
 
 Para diagnosticar la respuesta real desde Oracle, marca **Guardar JSON de
-diagnóstico (temporal)** antes de consultar. Se conserva además la estructura
+diagnóstico (temporal)** en **Opciones de diagnóstico** antes de consultar.
+Se conserva además la estructura
 JSON completa, incluidos campos que todavía no usa la tabla, ocultando
 credenciales, tokens y enlaces. El panel **JSON de diagnóstico** permite
 seleccionar y copiar el resultado; no se envía al navegador la respuesta sin

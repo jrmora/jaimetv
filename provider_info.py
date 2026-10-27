@@ -7,13 +7,9 @@ from urllib.parse import quote, quote_plus
 
 
 FIELDS = (
-    ("name", "Nombre"), ("title", "Título"), ("original_name", "Título original"),
-    ("plot", "Sinopsis"), ("description", "Descripción"), ("genre", "Género"),
-    ("cast", "Reparto"), ("director", "Dirección"), ("release_date", "Estreno"),
-    ("releasedate", "Estreno"), ("releaseDate", "Estreno"), ("rating", "Valoración del proveedor"),
-    ("duration", "Duración"), ("duration_secs", "Duración (segundos)"),
+    ("duration", "Duración del archivo"), ("duration_secs", "Duración (segundos)"),
     ("container_extension", "Formato"), ("size", "Tamaño declarado"),
-    ("bitrate", "Tasa de bits declarada"), ("season", "Temporada"),
+    ("bitrate", "Tasa de bits"), ("season", "Temporada"),
     ("season_number", "Temporada"), ("episode_count", "Episodios"),
 )
 TRACK_FIELDS = (
@@ -88,7 +84,7 @@ def normalize_provider_info(payload, kind, credentials=()):
                 if value and label not in seen:
                     result.append({"label": label, "value": value})
                     seen.add(label)
-        return result
+        return technical_fields(result)
 
     def tracks(info, media):
         found = []
@@ -97,7 +93,10 @@ def normalize_provider_info(payload, kind, credentials=()):
             found.append(value)
         elif isinstance(value, list):
             found.extend(track for track in value if isinstance(track, dict))
-        for key in (f"{media}_streams", "streams"):
+        stream_keys = (f"{media}_streams", "streams")
+        if media == "subtitle":
+            stream_keys += ("subtitles",)
+        for key in stream_keys:
             streams = info.get(key)
             if isinstance(streams, list):
                 found.extend(track for track in streams if isinstance(track, dict)
@@ -115,7 +114,10 @@ def normalize_provider_info(payload, kind, credentials=()):
             fields = []
             if media in {"audio", "subtitle"}:
                 fields.append({"label": "Idioma declarado", "value": language or "Idioma no informado"})
-            title = safe(tags.get("title"))
+            index = safe(track.get("index"))
+            if index:
+                fields.append({"label": "Índice de pista", "value": index})
+            title = safe(tags.get("title")) or safe(track.get("title"))
             if title:
                 fields.append({"label": "Nombre de pista", "value": title})
             fields.extend({"label": label, "value": value} for key, label in TRACK_FIELDS
@@ -157,4 +159,35 @@ def normalize_provider_info(payload, kind, credentials=()):
              "fields": rows(season)}
             for season in seasons if isinstance(season, dict)
         ] if isinstance(seasons, list) else []
+    return result
+
+
+def technical_fields(fields):
+    labels = {label for _, label in FIELDS}
+    aliases = {
+        "Duración": "Duración del archivo",
+        "Tasa de bits declarada": "Tasa de bits",
+        "Tasa de bits (unidad no informada)": "Tasa de bits",
+    }
+    result = [
+        {"label": aliases.get(field["label"], field["label"]), "value": field["value"]}
+        for field in fields if aliases.get(field["label"], field["label"]) in labels
+    ]
+    if any(field["label"] == "Duración del archivo" for field in result):
+        result = [field for field in result if field["label"] != "Duración (segundos)"]
+    return result
+
+
+def provider_presentation(data, kind):
+    # Older saved results can be adapted without another request to the provider.
+    if isinstance(data.get("diagnostic"), dict):
+        result = normalize_provider_info(data["diagnostic"], kind)
+        result["diagnostic"] = data["diagnostic"]
+        return result
+    result = {**data, "fields": technical_fields(data["fields"])}
+    result["episodes"] = [{**episode, "fields": technical_fields(episode["fields"])}
+                          for episode in data.get("episodes", [])]
+    if kind == "series":
+        result["seasons"] = [{**season, "fields": technical_fields(season["fields"])}
+                             for season in data.get("seasons", [])]
     return result

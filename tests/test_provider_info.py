@@ -11,7 +11,7 @@ import requests
 
 from app import create_app
 from catalog import CatalogStore, fingerprint
-from provider_info import normalize_provider_info, provider_fingerprint, provider_diagnostic
+from provider_info import normalize_provider_info, provider_fingerprint, provider_diagnostic, provider_presentation
 from test_app import snapshot
 from xtream import CatalogError, XtreamClient
 
@@ -28,6 +28,20 @@ def movie_info():
             "direct_source": "https://private.invalid/private-user/private-password/movie.mp4",
         },
         "movie_data": {"stream_id": 10, "container_extension": "mkv"},
+    }
+
+
+def ice_age_info():
+    return {
+        "info": {
+            "name": "Ice Age 4: Continental Drift", "genre": "Animation, Comedy, Adventure",
+            "cast": "Ray Romano, John Leguizamo", "director": "Michael Thurmeier, Steve Martino",
+            "release_date": "2012-06-27", "rating": 6.39, "plot": "Sinopsis de la obra",
+            "duration": "01:27:45", "duration_secs": 5265, "bitrate": 2379,
+            "subtitles": [{"index": index, "language": language, "title": None}
+                          for index, language in enumerate(["spa"] * 4 + ["eng"] * 2)],
+        },
+        "movie_data": {"container_extension": "mp4", "title": "Ice Age 4: Continental Drift"},
     }
 
 
@@ -99,6 +113,51 @@ class ProviderClientTests(unittest.TestCase):
 
 
 class ProviderNormalizationTests(unittest.TestCase):
+    def test_only_copy_specific_fields_and_one_duration_are_retained(self):
+        data = normalize_provider_info(ice_age_info(), "movies")
+        self.assertEqual(data["fields"], [
+            {"label": "Duración del archivo", "value": "01:27:45"},
+            {"label": "Tasa de bits", "value": "2379"},
+            {"label": "Formato", "value": "mp4"},
+        ])
+        self.assertEqual(data["audio"], [])
+        raw = ice_age_info()
+        del raw["info"]["duration"]
+        self.assertIn({"label": "Duración (segundos)", "value": "5265"},
+                      normalize_provider_info(raw, "movies")["fields"])
+
+    def test_legacy_cached_fields_are_filtered_without_mutating_cache(self):
+        data = {"fields": [
+            {"label": "Nombre", "value": "Duplicado"},
+            {"label": "Duración", "value": "01:27:45"},
+            {"label": "Duración (segundos)", "value": "5265"},
+            {"label": "Tasa de bits declarada", "value": "2379"},
+            {"label": "Formato", "value": "mp4"},
+        ], "audio": [], "video": [], "subtitles": [], "episodes": []}
+        original = copy.deepcopy(data)
+        view = provider_presentation(data, "movies")
+        self.assertEqual(data, original)
+        self.assertEqual([field["label"] for field in view["fields"]],
+                         ["Duración del archivo", "Tasa de bits", "Formato"])
+
+    def test_real_provider_subtitles_do_not_imply_audio_languages(self):
+        data = normalize_provider_info({
+            "info": {
+                "name": "Ice Age 4: Continental Drift",
+                "subtitles": [
+                    {"index": index, "language": language, "title": None}
+                    for index, language in enumerate(["spa"] * 4 + ["eng"] * 2)
+                ],
+            },
+            "movie_data": {"container_extension": "mp4"},
+        }, "movies")
+        self.assertEqual(data["audio"], [])
+        self.assertEqual(len(data["subtitles"]), 6)
+        self.assertEqual([track[0]["value"] for track in data["subtitles"]],
+                         ["Español (spa)"] * 4 + ["Inglés (eng)"] * 2)
+        self.assertEqual([track[1]["value"] for track in data["subtitles"]],
+                         [str(index) for index in range(6)])
+
     def test_diagnostic_keeps_unknown_fields_but_redacts_nested_private_data(self):
         payload = {
             "unknown": {"array": [True, None, 42, {"audio_language": "spa"}]},
@@ -215,6 +274,26 @@ class ProviderInfoTests(unittest.TestCase):
         self.provider.fetch_info.assert_called_once()
         self.assertNotIn("direct_source", json.dumps(cached))
 
+    def test_existing_diagnostic_is_reinterpreted_without_provider_request(self):
+        old = {"fields": [{"label": "Reparto", "value": "Ray Romano"}],
+               "audio": [], "subtitles": [], "video": [], "episodes": [], "diagnostic": ice_age_info()}
+        self.store.save_provider_info("movies", "10", provider_fingerprint(self.data["movies"][0]), old)
+        html = self.client.get("/catalog/movies/detail?id=10").get_data(as_text=True)
+        panel = html.split('<details id="provider-info"', 1)[1]
+        main_panel = panel.split('JSON de diagnóstico', 1)[0]
+        for label in ("Reparto", "Dirección", "Estreno", "Valoración del proveedor", "Duración (segundos)", "Género"):
+            self.assertNotIn(label, main_panel)
+        self.assertIn("Español (spa) · 4 pistas", main_panel)
+        self.assertIn("Inglés (eng) · 2 pistas", main_panel)
+        self.assertIn("Duración del archivo", main_panel)
+        self.assertIn("01:27:45", main_panel)
+        self.assertIn("No permite confirmar ni descartar audio en español", main_panel)
+        self.assertEqual(main_panel.count("Índice de pista"), 6)
+        self.assertIn("Detalles de pistas de subtítulos (6)", main_panel)
+        self.assertIn('id="provider-diagnostic-json"', panel)
+        self.factory.assert_not_called()
+        self.assertEqual(self.store.provider_cached("movies", "10", provider_fingerprint(self.data["movies"][0]))["data"], old)
+
     def test_optional_diagnostic_is_persistent_safe_and_removed_on_normal_refresh(self):
         self.provider.fetch_info.return_value["extra"] = {
             "unmapped_audio": ["spa", "eng"], "password": "other-secret",
@@ -293,8 +372,9 @@ class ProviderInfoTests(unittest.TestCase):
         page = self.post("series", "20").get_data(as_text=True)
         self.provider.fetch_info.assert_called_once_with("series", "20")
         self.assertIn("Idioma no informado", page)
-        self.assertIn("Episodios (1)", page)
-        self.assertIn("&lt;script&gt;unsafe&lt;/script&gt;", page)
+        self.assertIn("Copias de episodios (1)", page)
+        self.assertNotIn("unsafe", page)
+        self.assertIn("&lt;img src=x onerror=alert(1)&gt;", page)
         self.assertNotIn("<img src=x", page)
         self.assertIn("aac", page)
 
