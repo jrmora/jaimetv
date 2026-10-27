@@ -17,6 +17,46 @@ python -m pip install -r requirements.txt
 
 SQLite viene incluido en Python. Se usan requests, pandas y Flask.
 
+## Información de la copia del proveedor
+
+Debajo de TMDB, cada ficha incorpora **Información de la copia del proveedor**,
+plegada por defecto. **Consultar proveedor** realiza una petición explícita a
+`get_vod_info&vod_id=…` para películas o `get_series_info&series_id=…` para series,
+con las credenciales Xtream ya configuradas. No necesita JavaScript ni inspecciona,
+reproduce o descarga el vídeo. Abrir la ficha o desplegar el panel no consulta
+al proveedor.
+
+La tabla muestra los campos disponibles: duración, formato, tasa de bits,
+sinopsis y datos de vídeo/audio declarados (códec, resolución, canales e idioma).
+En series también se muestran temporadas y episodios, con datos técnicos por
+episodio. Un episodio no determina los audios del resto de la serie.
+**Idioma no informado** no significa «solo inglés» ni «sin español».
+Estos datos pueden describir una sola pista y no certifican todos los idiomas
+disponibles: no se deducen a partir de TMDB, el nombre o la categoría.
+
+Solo se guarda una selección de campos informativos en `provider_metadata`,
+con fecha UTC e identidad del registro; no se guarda ni muestra el JSON técnico
+completo, enlaces de reproducción o credenciales de esta consulta. Los campos
+de texto se escapan al mostrarlos. Cada copia conserva su propia ficha, incluso
+si varias versiones comparten una asociación TMDB. El selector permite consultar
+otra copia y los enlaces permiten ver sus datos guardados.
+
+Para diagnosticar la respuesta real desde Oracle, marca **Guardar JSON de
+diagnóstico (temporal)** antes de consultar. Se conserva además la estructura
+JSON completa, incluidos campos que todavía no usa la tabla, ocultando
+credenciales, tokens y enlaces. El panel **JSON de diagnóstico** permite
+seleccionar y copiar el resultado; no se envía al navegador la respuesta sin
+ocultar datos privados. La petición se hace desde el servidor, no desde el
+equipo que abre el navegador. Una actualización correcta sin marcar esta
+opción elimina el JSON de diagnóstico anterior; si falla, conserva lo guardado.
+Solo se captura una respuesta JSON válida de la ficha, no cuerpos HTML de error.
+
+**Actualizar proveedor** fuerza otra consulta. Si falla, se informa del error
+y se conserva el último resultado correcto. La sincronización no consulta estas
+fichas ni borra sus resultados mientras el título siga en el catálogo local.
+Si los datos originales cambian, se avisa de que la ficha guardada puede estar
+desactualizada. Los resultados se eliminan al borrar realmente el título local.
+
 ## Configuración
 
 ### Credenciales de TMDB

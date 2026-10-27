@@ -10,6 +10,8 @@ td { overflow-wrap: anywhere; }
 .detail-actions form { margin-top: 0 !important; }
 .detail-actions button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
 .kids-classification, .kids-classification .form-select { min-width: 0; }
+#provider-info, #provider-info .form-select { min-width: 0; overflow-wrap: anywhere; }
+#provider-diagnostic-json { max-height: 28rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 599.98px) {
   .detail-action-label { display: none; }
 }
@@ -31,6 +33,7 @@ td { overflow-wrap: anywhere; }
   .detail-layout #detail-score { grid-column: 2; grid-row: 3; align-self: start; }
   .detail-layout .detail-actions { grid-column: 2; grid-row: 4; align-self: start; }
   .detail-layout #tmdb-section,
+  .detail-layout #provider-info,
   .detail-layout .kids-classification,
   .detail-layout > section > .table-responsive,
   .detail-layout > section > figure { grid-column: 1 / -1; min-width: 0; margin: 0 !important; }

@@ -51,6 +51,7 @@ class XtreamClient:
         )
         self.credentials = {"username": username, "password": password}
         self.session = requests.Session()
+        self.info_session = requests.Session()
         retry = Retry(
             total=2,
             backoff_factor=0.5,
@@ -95,12 +96,12 @@ class XtreamClient:
             for field, env in fields.items()
         })
 
-    def fetch(self, action):
+    def _request(self, action, parameters=None, timeout=120, session=None):
         try:
-            with self.session.get(
+            with (session or self.session).get(
                 self.endpoint,
-                params={**self.credentials, "action": action},
-                timeout=(10, 120),
+                params={**self.credentials, "action": action, **(parameters or {})},
+                timeout=(10, timeout),
                 allow_redirects=False,
             ) as response:
                 if response.status_code != 200:
@@ -125,10 +126,35 @@ class XtreamClient:
         except requests.RequestException:
             # Los errores de requests pueden incluir la URL con usuario y contraseña.
             raise CatalogError(f"{action}: fallo de conexión, TLS o tiempo de espera.") from None
+        return payload
+
+    def fetch(self, action):
+        payload = self._request(action)
         if not isinstance(payload, list) or any(not isinstance(row, dict) for row in payload):
             raise CatalogError(
                 f"{action}: se esperaba una lista de objetos; comprueba el acceso y las credenciales."
             )
+        return payload
+
+    def fetch_info(self, kind, record_id):
+        actions = {"movies": ("get_vod_info", "vod_id"), "series": ("get_series_info", "series_id")}
+        if kind not in actions or not isinstance(record_id, str) or not record_id.isascii() or not record_id.isdecimal():
+            raise CatalogError("Identificador de ficha del proveedor inválido.")
+        action, parameter = actions[kind]
+        # Interactive queries must not inherit the long retries used by full catalog sync.
+        payload = self._request(action, {parameter: record_id}, timeout=15, session=self.info_session)
+        sections = ("info", "movie_data") if kind == "movies" else ("info", "seasons", "episodes")
+        if (not isinstance(payload, dict) or not any(payload.get(key) for key in sections)
+                or not isinstance(payload.get("info", {}), dict)
+                or (kind == "movies" and not isinstance(payload.get("movie_data", {}), dict))
+                or (kind == "series" and not isinstance(payload.get("episodes", {}), (dict, list)))):
+            raise CatalogError(f"{action}: el proveedor no devolvió una ficha válida.")
+        if kind == "series":
+            episodes = payload.get("episodes", {})
+            groups = episodes.values() if isinstance(episodes, dict) else [episodes]
+            if any(not isinstance(group, list) or any(not isinstance(episode, dict) for episode in group)
+                   for group in groups):
+                raise CatalogError(f"{action}: el proveedor devolvió episodios con formato inválido.")
         return payload
 
     def download(self):
@@ -136,3 +162,4 @@ class XtreamClient:
 
     def close(self):
         self.session.close()
+        self.info_session.close()

@@ -24,6 +24,7 @@ from platforms import ordered_platforms
 from auth import configure_auth
 from updater import read_state, write_state
 from kids_categories import DEFAULT_KIDS_CATEGORIES, KIDS_CATEGORIES
+from provider_info import normalize_provider_info, provider_fingerprint, provider_diagnostic
 
 
 LABELS = {"movies": "Películas", "series": "Series"}
@@ -348,6 +349,43 @@ def create_app(db_path=None):
         flash("Título pasado a contenido infantil." if action == "move" else "Categorías guardadas.", "kids")
         return redirect(url_for("detail", kind=kind, id=record_id, **filters), code=303)
 
+    @app.post("/catalog/<kind>/<record_id>/provider-info")
+    def title_provider_info(kind, record_id):
+        if kind not in KINDS:
+            abort(404)
+        check_sync_csrf()
+        record = store.detail(kind, record_id)
+        if record is None:
+            abort(404, description="La copia no existe en el catálogo local.")
+        filters = parameters()
+        filters.update(view=presentation(), page=page_number())
+        selected = request.form.get("provider_record_id", record_id)
+        diagnostic = request.form.get("provider_diagnostic", "0")
+        if diagnostic not in {"0", "1"}:
+            abort(400, description="Opción de diagnóstico inválida.")
+        if selected not in {version["id"] for version in record["versions"]}:
+            abort(400, description="Selecciona una de las copias de esta ficha.")
+        selected_record = store.detail(kind, selected)
+        if selected_record is None:
+            abort(404, description="La copia ya no existe en el catálogo local.")
+        try:
+            client = app.config.get("XTREAM_CLIENT_FACTORY", XtreamClient.from_env)()
+            try:
+                payload = client.fetch_info(kind, selected)
+                data = normalize_provider_info(payload, kind, credentials=client.credentials.values())
+                if diagnostic == "1":
+                    data["diagnostic"] = provider_diagnostic(payload, client.credentials.values())
+            finally:
+                client.close()
+            store.save_provider_info(kind, selected, provider_fingerprint(selected_record["data"]), data)
+        except (CatalogError, sqlite3.Error, OSError) as exc:
+            message = str(exc) if isinstance(exc, CatalogError) else "No se pudo guardar la ficha del proveedor. Revisa el almacenamiento y los permisos."
+            app.logger.warning("Consulta de ficha del proveedor fallida: %s", message)
+            flash(f"{message} No se sustituyeron los datos guardados.", "provider-error")
+        else:
+            flash("Información del proveedor guardada para esta copia.", "provider-success")
+        return redirect(url_for("detail", kind=kind, id=selected, **filters) + "#provider-info", code=303)
+
     @app.post("/catalog/<kind>/<record_id>/watchlist")
     def title_watchlist(kind, record_id):
         check_sync_csrf()
@@ -587,6 +625,7 @@ def create_app(db_path=None):
             "detail.html", record=record, fields=fields, trailer_url=trailer_url, people=people, category_links=category_links, kind=kind, image_url=image_url, backdrop_urls=backdrop_urls, filters=filters,
             content_metadata=store.tmdb_cached(kind, request.args.get("id", ""), "CA", fingerprint(record["data"])) if kind in {"movies", "series"} else None,
             kids_categories=store.kids_categories(kind, request.args.get("id", "")),
+            provider_metadata=store.provider_cached(kind, request.args.get("id", ""), provider_fingerprint(record["data"])),
             back_url=(
                 url_for("person_results", name=request.args["person"], view=filters["view"],
                         movies_page=page_number("movies_page"), series_page=page_number("series_page"))
@@ -729,7 +768,7 @@ def create_app(db_path=None):
             children = request.args.getlist("children")[-1]
             if children in {"all", "exclude"} and response.status_code == 200:
                 response.set_cookie("children_visibility", children, max_age=31536000, httponly=True, samesite="Lax")
-        if request.endpoint in {"listing", "catalog_api", "kids_listing", "detail", "person_results", "dashboard", "catalog_sync", "tmdb_batch_job"}:
+        if request.endpoint in {"listing", "catalog_api", "kids_listing", "detail", "person_results", "dashboard", "catalog_sync", "tmdb_batch_job", "title_provider_info"}:
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"

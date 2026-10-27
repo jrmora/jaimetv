@@ -316,6 +316,16 @@ class CatalogStore:
                 )
             """)
             db.execute("""
+                CREATE TABLE IF NOT EXISTS provider_metadata (
+                    kind TEXT NOT NULL,
+                    record_id TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    checked_at TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    PRIMARY KEY (kind, record_id)
+                )
+            """)
+            db.execute("""
                 CREATE TABLE IF NOT EXISTS kids_category_overrides (
                     kind TEXT NOT NULL,
                     record_id TEXT NOT NULL,
@@ -693,6 +703,28 @@ class CatalogStore:
             if kind in KINDS:
                 self._refresh_title_index(db, kind)
 
+    def provider_cached(self, kind, record_id, fingerprint):
+        with self.connect() as db:
+            row = db.execute(
+                "SELECT fingerprint, checked_at, payload FROM provider_metadata WHERE kind=? AND record_id=?",
+                (kind, record_id),
+            ).fetchone()
+        if row is None:
+            return None
+        return {"checked_at": row["checked_at"], "stale": row["fingerprint"] != fingerprint,
+                "data": json.loads(row["payload"])}
+
+    def save_provider_info(self, kind, record_id, fingerprint, payload):
+        table, _, key = KINDS[kind]
+        with self.connect() as db:
+            if db.execute(f"SELECT 1 FROM {table} WHERE {key}=?", (record_id,)).fetchone() is None:
+                raise CatalogError("La copia ya no existe en el catálogo.")
+            db.execute(
+                "INSERT OR REPLACE INTO provider_metadata VALUES (?, ?, ?, ?, ?)",
+                (kind, record_id, fingerprint, datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                 json.dumps(payload, ensure_ascii=False)),
+            )
+
     def cached_recommendations(self, kind, tmdb_id, since):
         with self.connect() as db:
             row = db.execute(
@@ -825,7 +857,7 @@ class CatalogStore:
     def _delete_title(self, db, kind, record_id):
         table, _, key = KINDS[kind]
         db.execute(f"DELETE FROM {table} WHERE {key}=?", (record_id,))
-        for related in ("tmdb_metadata", "watchlist", "provider_removed", "kids_category_overrides"):
+        for related in ("tmdb_metadata", "provider_metadata", "watchlist", "provider_removed", "kids_category_overrides"):
             db.execute(f"DELETE FROM {related} WHERE kind=? AND record_id=?", (kind, record_id))
         for state in ("watched", "banned"):
             db.execute(f"DELETE FROM {state}_{kind} WHERE record_id=?", (record_id,))
@@ -974,6 +1006,10 @@ class CatalogStore:
                         note(table, "removed_orphaned", row[key], data)
                 db.execute(
                     f"DELETE FROM provider_removed WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})", (kind,),
+                )
+                db.execute(
+                    f"DELETE FROM provider_metadata WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})",
+                    (kind,),
                 )
                 db.execute(
                     f"DELETE FROM kids_category_overrides WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})",
