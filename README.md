@@ -1,7 +1,7 @@
 # Explorador IPTV Xtream Codes
 
 Aplicación local para sincronizar y consultar metadatos de un catálogo autorizado.
-No reproduce ni descarga contenido ni genera enlaces de reproducción. Los JSON originales
+No reproduce ni guarda vídeos completos ni muestra enlaces de reproducción. Los JSON originales
 pueden contener URLs u otros datos privados del proveedor: protege la base de datos
 y los CSV, y no los publiques.
 
@@ -17,57 +17,36 @@ python -m pip install -r requirements.txt
 
 SQLite viene incluido en Python. Se usan requests, pandas y Flask.
 
-## Información de la copia del proveedor
+La consulta experimental de fichas técnicas individuales del proveedor y su
+diagnóstico JSON se han retirado. Al abrir la base de datos se elimina su
+tabla auxiliar, sin afectar al catálogo, TMDB ni las preferencias personales.
 
-Debajo de TMDB, cada ficha incorpora **Información de la copia del proveedor**,
-plegada por defecto. **Consultar proveedor** realiza una petición explícita a
-`get_vod_info&vod_id=…` para películas o `get_series_info&series_id=…` para series,
-con las credenciales Xtream ya configuradas. No necesita JavaScript ni inspecciona,
-reproduce o descarga el vídeo. Abrir la ficha o desplegar el panel no consulta
-al proveedor.
+### Comprobar idiomas de audio (opcional, solo películas)
 
-La tabla solo muestra información propia de la copia: duración del archivo
-(puede diferir de la duración de la obra en TMDB), formato, tamaño, tasa de bits
-y pistas de audio/subtítulos declaradas. No repite títulos, sinopsis, géneros,
-reparto, dirección, estrenos ni valoraciones. No se inventan unidades cuando
-el proveedor no las indica. La duración en segundos solo aparece si no hay
-una duración textual, evitando duplicarla.
-Los idiomas se resumen con el número de pistas; índices, códecs, resolución
-y canales quedan en desplegables técnicos. En series se muestran las temporadas
-y copias de episodios que ofrece el proveedor, con datos técnicos por episodio.
-Un episodio no determina los audios del resto de la serie.
-**Idioma no informado** no significa «solo inglés» ni «sin español».
-Estos datos pueden describir una sola pista y no certifican todos los idiomas
-disponibles: no se deducen a partir de TMDB, el nombre o la categoría.
-Las pistas de `subtitles` se muestran como subtítulos declarados, conservando
-su índice: tener subtítulos en español no confirma que exista audio en español.
-Las fichas guardadas con versiones anteriores se adaptan al abrirlas, sin
-consultas externas. Si hay un JSON de diagnóstico guardado, se reinterpretan
-también sus campos con el formato actual (por ejemplo, `subtitles`).
+En la parte superior de la ficha, «Audio → Comprobar» inspecciona las pistas
+de la copia elegida en segundo plano desde el servidor. Requiere `ffprobe`
+del paquete de sistema FFmpeg (en Ubuntu/Oracle: `sudo apt install ffmpeg`).
+Sin él se muestra un error; el resto de la aplicación funciona normalmente.
+No requiere paquetes Python adicionales.
 
-Solo se guarda una selección de campos informativos en `provider_metadata`,
-con fecha UTC e identidad del registro; no se guarda ni muestra el JSON técnico
-completo, enlaces de reproducción o credenciales de esta consulta. Los campos
-de texto se escapan al mostrarlos. Cada copia conserva su propia ficha, incluso
-si varias versiones comparten una asociación TMDB. El selector permite consultar
-otra copia y los enlaces permiten ver sus datos guardados.
+Se guardan fecha, idiomas declarados y cantidad de pistas en SQLite, por
+identificador de copia, sin compartirlos con otras versiones del mismo título.
+Al volver a abrir la ficha se muestran códigos compactos como ES y EN sin
+repetir la inspección. «?» indica pistas sin idioma conocido; no se deduce el
+audio de TMDB, de los subtítulos ni del nombre. Son etiquetas del archivo,
+no reconocimiento del idioma hablado. Cambios en el JSON de la copia
+invalidan la visualización guardada; los fallos no borran resultados previos.
+Si cambias de proveedor/cuenta, vuelve a comprobar las copias.
 
-Para diagnosticar la respuesta real desde Oracle, marca **Guardar JSON de
-diagnóstico (temporal)** en **Opciones de diagnóstico** antes de consultar.
-Se conserva además la estructura
-JSON completa, incluidos campos que todavía no usa la tabla, ocultando
-credenciales, tokens y enlaces. El panel **JSON de diagnóstico** permite
-seleccionar y copiar el resultado; no se envía al navegador la respuesta sin
-ocultar datos privados. La petición se hace desde el servidor, no desde el
-equipo que abre el navegador. Una actualización correcta sin marcar esta
-opción elimina el JSON de diagnóstico anterior; si falla, conserva lo guardado.
-Solo se captura una respuesta JSON válida de la ficha, no cuerpos HTML de error.
-
-**Actualizar proveedor** fuerza otra consulta. Si falla, se informa del error
-y se conserva el último resultado correcto. La sincronización no consulta estas
-fichas ni borra sus resultados mientras el título siga en el catálogo local.
-Si los datos originales cambian, se avisa de que la ficha guardada puede estar
-desactualizada. Los resultados se eliminan al borrar realmente el título local.
+Solo se inicia con el botón: navegar, sincronizar o exportar no inspecciona
+vídeos. Hay una comprobación simultánea por base de datos, con un máximo
+de 20 segundos de proceso, 12 MiB de datos leídos y 16 peticiones de lectura.
+La transferencia tiene además búferes, cabeceras y sobrecarga de red. Puede ocupar
+una conexión de la cuenta IPTV e interferir con la reproducción.
+Algunos archivos necesitan más lectura o usan redirecciones, que no se
+siguen: en esos casos se muestra el error, no se inventan idiomas.
+Las credenciales se usan solo dentro del servidor, no en argumentos de
+ffprobe, HTML ni registros. No se guarda el vídeo ni el JSON técnico completo.
 
 ## Configuración
 

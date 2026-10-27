@@ -24,7 +24,7 @@ from platforms import ordered_platforms
 from auth import configure_auth
 from updater import read_state, write_state
 from kids_categories import DEFAULT_KIDS_CATEGORIES, KIDS_CATEGORIES
-from provider_info import normalize_provider_info, provider_fingerprint, provider_diagnostic, provider_presentation
+from movie_audio import MovieAudioJobs, probe_movie
 
 
 LABELS = {"movies": "Películas", "series": "Series"}
@@ -50,6 +50,8 @@ def create_app(db_path=None):
     sync_state = {"status": "idle"}
     tmdb_batch = TMDBBatch(store, app.logger)
     app.config["TMDB_BATCH"] = tmdb_batch
+    movie_audio = MovieAudioJobs(store, app.logger)
+    app.config["MOVIE_AUDIO_JOBS"] = movie_audio
     update_directory = os.environ.get("IPTV_UPDATE_STATE")
     app.config["UPDATE_ENABLED"] = bool(update_directory and app.config["AUTH_ENABLED"])
     update_lock = threading.RLock()
@@ -110,8 +112,8 @@ def create_app(db_path=None):
         with update_lock, sync_lock:
             if update_status()["status"] == "running":
                 return jsonify(error="Ya hay una actualización en curso."), 409
-            if sync_state["status"] == "running" or tmdb_batch.status()["status"] == "running":
-                return jsonify(error="Espera a que termine la sincronización o el lote TMDB antes de actualizar."), 409
+            if sync_state["status"] == "running" or tmdb_batch.status()["status"] == "running" or movie_audio.running():
+                return jsonify(error="Espera a que terminen los procesos en curso antes de actualizar."), 409
             directory = Path(update_directory)
             try:
                 write_state(directory, status="running", message="Iniciando actualización.")
@@ -127,6 +129,26 @@ def create_app(db_path=None):
         expected = session.get("sync_csrf")
         if not expected or not token.isascii() or not secrets.compare_digest(token, expected):
             abort(400, description="La sesión ha caducado. Recarga la página.")
+
+    @app.route("/api/movies/<record_id>/audio", methods=["GET", "POST"])
+    def movie_audio_info(record_id):
+        record = store.detail("movies", record_id)
+        if record is None:
+            abort(404, description="Esta copia no existe en el catálogo.")
+        if request.method == "POST":
+            check_sync_csrf()
+            try:
+                started = movie_audio.start(
+                    record_id, app.config.get("XTREAM_CLIENT_FACTORY", XtreamClient.from_env),
+                    app.config.get("MOVIE_AUDIO_PROBE", probe_movie),
+                )
+            except CatalogError as exc:
+                app.logger.warning("No se pudo iniciar la comprobación de audio: %s", exc)
+                return jsonify(error=str(exc)), 400
+            if not started:
+                return jsonify(error="Ya hay una comprobación de audio en curso. Espera a que termine."), 409
+            return jsonify(running=True), 202
+        return jsonify(movie_audio.status(record_id))
 
     @app.route("/api/tmdb/batch", methods=["GET", "POST"])
     def tmdb_batch_job():
@@ -348,43 +370,6 @@ def create_app(db_path=None):
             abort(404, description="El título no existe en el catálogo local.")
         flash("Título pasado a contenido infantil." if action == "move" else "Categorías guardadas.", "kids")
         return redirect(url_for("detail", kind=kind, id=record_id, **filters), code=303)
-
-    @app.post("/catalog/<kind>/<record_id>/provider-info")
-    def title_provider_info(kind, record_id):
-        if kind not in KINDS:
-            abort(404)
-        check_sync_csrf()
-        record = store.detail(kind, record_id)
-        if record is None:
-            abort(404, description="La copia no existe en el catálogo local.")
-        filters = parameters()
-        filters.update(view=presentation(), page=page_number())
-        selected = request.form.get("provider_record_id", record_id)
-        diagnostic = request.form.get("provider_diagnostic", "0")
-        if diagnostic not in {"0", "1"}:
-            abort(400, description="Opción de diagnóstico inválida.")
-        if selected not in {version["id"] for version in record["versions"]}:
-            abort(400, description="Selecciona una de las copias de esta ficha.")
-        selected_record = store.detail(kind, selected)
-        if selected_record is None:
-            abort(404, description="La copia ya no existe en el catálogo local.")
-        try:
-            client = app.config.get("XTREAM_CLIENT_FACTORY", XtreamClient.from_env)()
-            try:
-                payload = client.fetch_info(kind, selected)
-                data = normalize_provider_info(payload, kind, credentials=client.credentials.values())
-                if diagnostic == "1":
-                    data["diagnostic"] = provider_diagnostic(payload, client.credentials.values())
-            finally:
-                client.close()
-            store.save_provider_info(kind, selected, provider_fingerprint(selected_record["data"]), data)
-        except (CatalogError, sqlite3.Error, OSError) as exc:
-            message = str(exc) if isinstance(exc, CatalogError) else "No se pudo guardar la ficha del proveedor. Revisa el almacenamiento y los permisos."
-            app.logger.warning("Consulta de ficha del proveedor fallida: %s", message)
-            flash(f"{message} No se sustituyeron los datos guardados.", "provider-error")
-        else:
-            flash("Información del proveedor guardada para esta copia.", "provider-success")
-        return redirect(url_for("detail", kind=kind, id=selected, **filters) + "#provider-info", code=303)
 
     @app.post("/catalog/<kind>/<record_id>/watchlist")
     def title_watchlist(kind, record_id):
@@ -621,14 +606,13 @@ def create_app(db_path=None):
             url = valid_image(candidate)
             if url and url != image_url and url not in backdrop_urls:
                 backdrop_urls.append(url)
-        provider_metadata = store.provider_cached(kind, request.args.get("id", ""), provider_fingerprint(record["data"]))
-        if provider_metadata:
-            provider_metadata["data"] = provider_presentation(provider_metadata["data"], kind)
         response = app.make_response(render_template(
             "detail.html", record=record, fields=fields, trailer_url=trailer_url, people=people, category_links=category_links, kind=kind, image_url=image_url, backdrop_urls=backdrop_urls, filters=filters,
             content_metadata=store.tmdb_cached(kind, request.args.get("id", ""), "CA", fingerprint(record["data"])) if kind in {"movies", "series"} else None,
             kids_categories=store.kids_categories(kind, request.args.get("id", "")),
-            provider_metadata=provider_metadata,
+            movie_audio_states={
+                version["id"]: movie_audio.status(version["id"]) for version in record["versions"]
+            } if kind == "movies" else {},
             back_url=(
                 url_for("person_results", name=request.args["person"], view=filters["view"],
                         movies_page=page_number("movies_page"), series_page=page_number("series_page"))
@@ -771,7 +755,7 @@ def create_app(db_path=None):
             children = request.args.getlist("children")[-1]
             if children in {"all", "exclude"} and response.status_code == 200:
                 response.set_cookie("children_visibility", children, max_age=31536000, httponly=True, samesite="Lax")
-        if request.endpoint in {"listing", "catalog_api", "kids_listing", "detail", "person_results", "dashboard", "catalog_sync", "tmdb_batch_job", "title_provider_info"}:
+        if request.endpoint in {"listing", "catalog_api", "kids_listing", "detail", "person_results", "dashboard", "catalog_sync", "tmdb_batch_job", "movie_audio_info"}:
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"

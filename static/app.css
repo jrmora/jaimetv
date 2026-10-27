@@ -10,9 +10,6 @@ td { overflow-wrap: anywhere; }
 .detail-actions form { margin-top: 0 !important; }
 .detail-actions button { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
 .kids-classification, .kids-classification .form-select { min-width: 0; }
-#provider-info, #provider-info .form-select { min-width: 0; overflow-wrap: anywhere; }
-#provider-info .form-select { max-width: 100%; text-overflow: ellipsis; }
-#provider-diagnostic-json { max-height: 28rem; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 599.98px) {
   .detail-action-label { display: none; }
 }
@@ -33,8 +30,14 @@ td { overflow-wrap: anywhere; }
   .detail-layout #content-labels { grid-column: 2; grid-row: 2; }
   .detail-layout #detail-score { grid-column: 2; grid-row: 3; align-self: start; }
   .detail-layout .detail-actions { grid-column: 2; grid-row: 4; align-self: start; }
+  .detail-layout.has-audio { grid-template-rows: auto auto auto auto 1fr; }
+  .detail-layout.has-audio > aside { grid-row: 1 / 6; }
+  .detail-layout.has-audio > section > header { grid-row: 1; }
+  .detail-layout .movie-audio { grid-column: 2; grid-row: 2; margin: 0 !important; }
+  .detail-layout.has-audio #content-labels { grid-row: 3; }
+  .detail-layout.has-audio #detail-score { grid-row: 4; }
+  .detail-layout.has-audio .detail-actions { grid-row: 5; }
   .detail-layout #tmdb-section,
-  .detail-layout #provider-info,
   .detail-layout .kids-classification,
   .detail-layout > section > .table-responsive,
   .detail-layout > section > figure { grid-column: 1 / -1; min-width: 0; margin: 0 !important; }
@@ -153,10 +156,14 @@ td { overflow-wrap: anywhere; }
 @media (max-width: 1199.98px) {
   .detail-layout.has-versions { grid-template-columns: minmax(0, 1fr); }
   .detail-layout.has-versions > aside { grid-column: 1; grid-row: 5; }
+  .detail-layout.has-versions.has-audio > aside { grid-row: 6; }
   .detail-layout.has-versions > section > header,
   .detail-layout.has-versions #content-labels,
   .detail-layout.has-versions #detail-score,
-  .detail-layout.has-versions .detail-actions { grid-column: 1; }
+  .detail-layout.has-versions .detail-actions,
+  .detail-layout.has-versions .movie-audio { grid-column: 1; }
 }
 .provider-metadata summary { cursor: pointer; font-weight: 600; }
 .provider-metadata th { width: 35%; overflow-wrap: anywhere; }
+.movie-audio { min-width: 0; max-width: 100%; }
+.movie-audio .form-select { width: auto; max-width: 100%; }

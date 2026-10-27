@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import create_app, main
-from catalog import CatalogStore
+from catalog import CatalogStore, fingerprint
 from test_app import snapshot
 from xtream import XtreamClient
 from xtream import CatalogError
@@ -47,6 +47,40 @@ class VODOnlyTests(unittest.TestCase):
         self.assertEqual([call.args[0] for call in fetch.call_args_list], [
             "get_vod_categories", "get_series_categories", "get_vod_streams", "get_series",
         ])
+
+    def test_experimental_provider_details_are_removed_without_losing_catalog_state(self):
+        raw = self.store.detail("movies", "10")["data"]
+        metadata = {"status": "matched", "id": 123, "title": "Batman"}
+        self.store.save_tmdb("movies", "10", "CA", fingerprint(raw), metadata)
+        self.store.set_watchlisted("movies", "10", True)
+        self.store.set_watched("movies", "10", True)
+        self.store.set_kids_categories("movies", "10", {
+            "superheroes": "include", "anime": "auto", "animation_hits": "auto", "family": "auto",
+        })
+        with self.store.connect() as db:
+            db.execute("CREATE TABLE provider_metadata (kind TEXT, record_id TEXT, payload TEXT)")
+            db.execute("INSERT INTO provider_metadata VALUES ('movies', '10', 'temporary diagnostic')")
+        for _ in range(2):
+            reopened = CatalogStore(self.path)
+            with reopened.connect() as db:
+                self.assertIsNone(db.execute(
+                    "SELECT name FROM sqlite_master WHERE name='provider_metadata'"
+                ).fetchone())
+            self.assertEqual(reopened.detail("movies", "10")["data"], raw)
+            self.assertTrue(reopened.detail("movies", "10")["watchlisted"])
+            self.assertTrue(reopened.detail("movies", "10")["watched"])
+            self.assertEqual(reopened.tmdb_cached("movies", "10", "CA", fingerprint(raw)), metadata)
+            self.assertEqual(reopened.kids_categories("movies", "10")[0]["mode"], "include")
+        for kind, record_id in (("movies", "10"), ("series", "20")):
+            html = self.client.get(f"/catalog/{kind}/detail?id={record_id}").get_data(as_text=True)
+            self.assertIn('id="tmdb-section"', html)
+            self.assertIn('id="kids-classification"', html)
+            self.assertNotIn('id="provider-info"', html)
+            self.assertNotIn("provider-diagnostic", html)
+            self.assertEqual(self.client.post(
+                f"/catalog/{kind}/{record_id}/provider-info"
+            ).status_code, 404)
+        self.assertFalse(hasattr(XtreamClient, "fetch_info"))
 
     def test_sync_removes_legacy_live_tables_once_without_recreating_them(self):
         with self.store.connect() as db:

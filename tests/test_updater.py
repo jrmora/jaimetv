@@ -88,6 +88,11 @@ class UpdateTests(unittest.TestCase):
         self.app.config["TMDB_BATCH"].state["status"] = "running"
         self.assertEqual(self.post().status_code, 409)
 
+    def test_audio_inspection_prevents_deploy(self):
+        with patch.object(self.app.config["MOVIE_AUDIO_JOBS"], "running", return_value=True):
+            self.assertEqual(self.post().status_code, 409)
+        self.assertFalse((self.state / "request").exists())
+
 
 class DeploymentWorkerTests(unittest.TestCase):
     def setUp(self):

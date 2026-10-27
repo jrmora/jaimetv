@@ -1,0 +1,41 @@
+{% set selected_id = request.args.get('id') %}
+<div id="movie-audio" class="movie-audio mb-3"
+     data-csrf="{{ sync_csrf }}" data-selected="{{ selected_id }}">
+  {% if record.version_count > 1 %}
+  <label for="audio-copy" class="visually-hidden">Copia para comprobar el audio</label>
+  <select id="audio-copy" class="form-select form-select-sm mb-2" aria-label="Copia para comprobar el audio">
+    {% for version in record.versions %}
+    <option value="{{ version.id }}" {% if version.id == selected_id %}selected{% endif %}>{{ version.name }}{% if version.unavailable %} (no disponible){% endif %}</option>
+    {% endfor %}
+  </select>
+  {% endif %}
+  {% for version in record.versions %}
+  {% set state = movie_audio_states[version.id] %}
+  <div data-audio-copy="{{ version.id }}" data-endpoint="{{ url_for('movie_audio_info', record_id=version.id) }}"
+       data-state="{{ state|tojson|forceescape }}" data-unavailable="{{ 'true' if version.unavailable else 'false' }}"
+       {% if version.id != selected_id %}hidden{% endif %}>
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      <span class="small text-muted">Audio</span>
+      <span data-audio-languages class="d-inline-flex flex-wrap gap-1" aria-live="polite">
+        {% if state.metadata %}
+          {% for code in state.metadata.languages %}
+          <span class="badge text-bg-secondary" title="Idioma declarado en una pista de audio de esta copia">{{ code }}</span>
+          {% endfor %}
+          {% if state.metadata.unknown %}<span class="badge text-bg-secondary" title="Hay pistas de audio sin idioma identificado">?</span>{% endif %}
+          {% if not state.metadata.tracks %}<span class="small text-muted">Sin pistas de audio</span>{% endif %}
+        {% else %}
+          <span class="small text-muted">{{ 'Copia modificada; vuelve a comprobar' if state.stale else 'Sin comprobar' }}</span>
+        {% endif %}
+      </span>
+      <button type="button" class="btn btn-sm btn-outline-secondary" data-audio-check
+              {% if state.running or version.unavailable %}disabled{% endif %}
+              aria-label="{{ 'Volver a comprobar el audio' if state.metadata else 'Comprobar el audio' }}"
+              title="Lee las etiquetas de las pistas, no reconoce el idioma hablado. Puede ocupar una conexión IPTV.">
+        {{ 'Comprobando…' if state.running else ('↻' if state.metadata else 'Comprobar') }}
+      </button>
+    </div>
+    <p data-audio-error class="small text-danger mt-1 mb-0" role="alert" {% if not state.error %}hidden{% endif %}>{{ state.error or '' }}</p>
+  </div>
+  {% endfor %}
+  <noscript><p class="small text-muted mb-0">Activa JavaScript para comprobar el audio.</p></noscript>
+</div>
