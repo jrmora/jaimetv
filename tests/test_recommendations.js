@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
+const { withSpa } = require("./spa-stub");
 
 function setup() {
   const events = {};
@@ -29,7 +30,7 @@ function setup() {
   let result = { html: "cards" };
   let ok = true;
   let requests = 0;
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/recommendations.js"), "utf8"), {
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/recommendations.js"), "utf8"), withSpa({
     document: {
       querySelector: () => section,
       addEventListener(name, callback) { events[name] = callback; },
@@ -42,7 +43,7 @@ function setup() {
       requests++;
       return { ok, json: async () => result };
     },
-  });
+  }));
   return {
     section, content, error, retry,
     load: () => events["tmdb-updated"](),

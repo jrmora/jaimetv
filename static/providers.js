@@ -1,6 +1,6 @@
 "use strict";
 
-(() => {
+window.jaimetvSpa.register(() => {
   const panel = document.querySelector("#provider-filter");
   if (!panel) return;
   const services = JSON.parse(panel.dataset.subscriptions);
@@ -23,4 +23,4 @@
   for (const image of panel.querySelectorAll(".provider-choice img")) {
     if (image.complete && image.naturalWidth === 0) showLogoError(image);
   }
-})();
+});

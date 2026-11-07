@@ -1,6 +1,6 @@
 "use strict";
 
-(() => {
+window.jaimetvSpa.register(({ signal }) => {
   const button = document.querySelector("#catalog-sync");
   const status = document.querySelector("#sync-status");
   if (!button || !status) return;
@@ -38,7 +38,9 @@
         (reloadOnCompletion ? "Actualizando esta página…" : ""));
       if (reloadOnCompletion) {
         button.disabled = true;
-        setTimeout(() => location.reload(), 2000);
+        setTimeout(() => {
+          if (!signal.aborted) window.jaimetvSpa.reload();
+        }, 2000);
       }
     } else if (result.status === "failed") {
       message(`No se pudo sincronizar. ${result.error}`, true);
@@ -46,6 +48,7 @@
   }
 
   async function check() {
+    if (signal.aborted) return;
     try {
       const response = await fetch(button.dataset.endpoint, { cache: "no-store" });
       const result = await response.json();
@@ -79,4 +82,4 @@
     }
   });
   check();
-})();
+});

@@ -5,6 +5,7 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { test } = require("node:test");
 const { runInNewContext } = require("node:vm");
+const { withSpa } = require("./spa-stub");
 
 const script = readFileSync(join(__dirname, "../static/tmdb.js"), "utf8");
 
@@ -46,7 +47,7 @@ async function fixture(image = null, replacements = []) {
   let nextStatus = "matched";
   const providerMetadata = { hidden: true };
   const requests = [];
-  runInNewContext(script, {
+  runInNewContext(script, withSpa({
     Event,
     document: {
       dispatchEvent() {},
@@ -65,7 +66,7 @@ async function fixture(image = null, replacements = []) {
       parseFromString() { return { body: { childNodes: nextImage ? [nextImage] : [] } }; }
     },
     URLSearchParams,
-  });
+  }));
   await new Promise(setImmediate);
   return {
     originals, content, errorBox, fields, requests, manualForm, manualControls, providerMetadata,

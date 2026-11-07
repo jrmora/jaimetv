@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
+const { withSpa } = require("./spa-stub");
 
 test("tablet filters start collapsed and desktop filters reopen on resize", () => {
   const filters = { open: true };
@@ -13,10 +14,10 @@ test("tablet filters start collapsed and desktop filters reopen on resize", () =
     matches: true,
     addEventListener(event, handler) { change = handler; },
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/responsive.js"), "utf8"), {
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/responsive.js"), "utf8"), withSpa({
     document: { querySelector: selector => selector === "#catalog-filters" ? filters : null },
     matchMedia: () => media,
-  });
+  }));
 
   assert.equal(filters.open, false);
   filters.open = true;
@@ -42,10 +43,10 @@ test("compact filter button opens and closes the panel with an accessible state"
       addEventListener(event, handler) { listeners[event] = handler; },
       setAttribute(name, value) { attributes[name] = value; },
     };
-    vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/responsive.js"), "utf8"), {
+    vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/responsive.js"), "utf8"), withSpa({
       document: { querySelector: selector => selector === "#catalog-filters" ? filters : toggle },
       matchMedia: () => ({ matches: true, addEventListener() {} }),
-    });
+    }));
     assert.equal(toggle.hidden, false);
     assert.equal(filters.open, false);
     assert.equal(attributes["aria-expanded"], "false");

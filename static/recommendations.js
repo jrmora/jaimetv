@@ -1,12 +1,13 @@
 "use strict";
 
-(() => {
+window.jaimetvSpa.register(({ signal }) => {
   const section = document.querySelector("#recommendations");
   if (!section) return;
   const content = section.querySelector("#recommendations-content");
   const errorBox = section.querySelector("#recommendations-error");
   const retry = section.querySelector("#recommendations-retry");
   let controller;
+  signal.addEventListener("abort", () => controller?.abort());
 
   async function load() {
     controller?.abort();
@@ -44,7 +45,7 @@
     }
   }
 
-  document.addEventListener("tmdb-updated", load);
-  document.addEventListener("movie-state-changed", load);
+  document.addEventListener("tmdb-updated", load, { signal });
+  document.addEventListener("movie-state-changed", load, { signal });
   retry.addEventListener("click", load);
-})();
+});

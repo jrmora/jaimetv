@@ -35,6 +35,22 @@ class AdministrationTests(unittest.TestCase):
                 self.assertNotIn(f'id="{control}"'.encode(), response.data)
         self.assertEqual(self.client.get("/admin?kind=channels").status_code, 400)
 
+    def test_diagnostic_console_allows_only_fixed_commands(self):
+        page = self.client.get("/admin")
+        self.assertIn(b'id="diagnostic-console"', page.data)
+        with self.client.session_transaction() as session:
+            csrf = session["sync_csrf"]
+        for command in ("help", "status", "resources", "requests"):
+            response = self.client.post("/api/admin/console", data={"command": command, "csrf": csrf})
+            self.assertEqual(response.status_code, 200, command)
+            self.assertEqual(response.get_json()["command"], command)
+        response = self.client.post("/api/admin/console", data={"command": "status; id", "csrf": csrf})
+        self.assertEqual(response.status_code, 400)
+        self.assertNotIn(str(self.app.config["CATALOG_STORE"].path), response.get_data(as_text=True))
+
+    def test_diagnostic_console_requires_csrf(self):
+        self.assertEqual(self.client.post("/api/admin/console", data={"command": "status"}).status_code, 400)
+
     def test_coverage_only_appears_in_administration(self):
         for kind in ("movies", "series"):
             page = self.client.get(f"/admin?kind={kind}").get_data(as_text=True)

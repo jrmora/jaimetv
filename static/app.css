@@ -5,6 +5,7 @@ th { white-space: nowrap; }
 td { overflow-wrap: anywhere; }
 .detail-value { white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 [hidden] { display: none !important; }
+.diagnostic-console-output { min-height: 7rem; max-height: 24rem; white-space: pre-wrap; }
 
 .detail-poster { display: block; width: 100%; max-width: 320px; height: auto; margin-inline: auto; }
 .detail-actions form { margin-top: 0 !important; }

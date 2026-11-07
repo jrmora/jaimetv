@@ -1,6 +1,6 @@
 "use strict";
 
-(() => {
+window.jaimetvSpa.register(() => {
   const button = document.querySelector("#application-update");
   const status = document.querySelector("#update-status");
   if (!button || !status) return;
@@ -61,4 +61,4 @@
     }
   });
   poll();
-})();
+});

@@ -1,6 +1,6 @@
 "use strict";
 
-(() => {
+window.jaimetvSpa.register(({ signal }) => {
   const panel = document.querySelector("#tmdb-admin");
   if (!panel) return;
   const status = panel.querySelector("#tmdb-batch-status");
@@ -28,6 +28,7 @@
   }
 
   async function check() {
+    if (signal.aborted) return;
     clearTimeout(timer);
     try {
       const state = await request();
@@ -48,7 +49,9 @@
         state.status === "failed");
         if (wasRunning) {
           wasRunning = false;
-          setTimeout(() => location.reload(), 2000);
+          setTimeout(() => {
+            if (!signal.aborted) window.jaimetvSpa.reload();
+          }, 2000);
         }
       }
     } catch (error) {
@@ -86,4 +89,4 @@
     }
   });
   check();
-})();
+});

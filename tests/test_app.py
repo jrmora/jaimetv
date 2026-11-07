@@ -510,6 +510,8 @@ class StoreTests(unittest.TestCase):
                 self.assertIn("justify-content-between", header)
                 self.assertIn('id="theme-icon" aria-hidden="true"', html)
                 self.assertIn('/static/navigation.js', html)
+                self.assertIn('/static/spa.js', html)
+                self.assertIn('data-spa-base', html)
                 self.assertNotIn('Volver al listado', html)
 
     def test_all_results_over_100_in_web_api_people_and_cli(self):

@@ -3,11 +3,14 @@ import json
 import logging
 import os
 import re
+import resource
 import secrets
+import shutil
 import sqlite3
 import sys
 import threading
 import time
+from collections import deque
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -35,6 +38,7 @@ def create_app(db_path=None):
     app = Flask(__name__)
     app.logger.setLevel(logging.INFO)
     app.secret_key = secrets.token_hex(32)
+    diagnostic_events = deque(maxlen=100)
 
     @app.before_request
     def start_performance_measurement():
@@ -67,6 +71,14 @@ def create_app(db_path=None):
             return response
         elapsed = (time.perf_counter() - g.performance_started) * 1000
         timings = {**g.performance_timings, "total": elapsed}
+        if request.endpoint != "static":
+            diagnostic_events.append({
+                "time": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "endpoint": request.endpoint or "unknown",
+                "method": request.method,
+                "status": response.status_code,
+                "duration_ms": round(elapsed, 1),
+            })
         response.headers["Server-Timing"] = ", ".join(
             f"{name};dur={duration:.1f}" for name, duration in timings.items()
         )
@@ -428,6 +440,56 @@ def create_app(db_path=None):
             },
             sync_summary=store.last_sync_summary(),
         )
+
+    @app.post("/api/admin/console")
+    def admin_console():
+        check_sync_csrf()
+        command = request.form.get("command", "").strip().casefold()
+        if len(command) > 40:
+            abort(400, description="Comando no permitido.")
+        if command == "help":
+            output = "Comandos disponibles: help, status, resources, requests"
+        elif command == "status":
+            lines = ["Aplicación: disponible"]
+            try:
+                with store.connect() as db:
+                    db.execute("SELECT 1").fetchone()
+                    totals = {
+                        kind: db.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+                        for kind, (table, _, _) in KINDS.items()
+                    }
+                lines.append("Base de datos: disponible")
+                lines.extend(f"Registros de {kind}: {count}" for kind, count in totals.items())
+            except sqlite3.Error:
+                lines.append("Base de datos: error de acceso")
+            lines.append(f"Sincronización: {sync_state['status']}")
+            lines.append(f"Lote TMDB: {tmdb_batch.status().get('status', 'desconocido')}")
+            if app.config["UPDATE_ENABLED"]:
+                try:
+                    lines.append(f"Actualización: {read_state(Path(update_directory)).get('status', 'desconocido')}")
+                except (OSError, ValueError):
+                    lines.append("Actualización: estado no disponible")
+            else:
+                lines.append("Actualización: no configurada")
+            output = "\n".join(lines)
+        elif command == "resources":
+            peak_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+            peak_mb = peak_rss / (1024 * 1024 if sys.platform == "darwin" else 1024)
+            free_gb = shutil.disk_usage(store.path.parent).free / (1024 ** 3)
+            output = (
+                f"Memoria máxima del proceso: {peak_mb:.1f} MB (desde que inició)\n"
+                f"Espacio libre en disco: {free_gb:.2f} GB"
+            )
+        elif command == "requests":
+            events = list(diagnostic_events)[-20:]
+            output = "\n".join(
+                f"{item['time']} {item['method']} {item['endpoint']} "
+                f"{item['status']} {item['duration_ms']:.1f} ms"
+                for item in events
+            ) or "No hay eventos desde el inicio del proceso."
+        else:
+            abort(400, description="Comando no permitido. Escribe help para ver los comandos disponibles.")
+        return jsonify(command=command, output=output)
 
     @app.get("/api/docs")
     def api_docs():

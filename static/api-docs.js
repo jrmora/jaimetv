@@ -1,6 +1,8 @@
 "use strict";
 
-const docs = document.querySelector("#swagger-ui");
+window.jaimetvSpa.register(() => {
+  const docs = document.querySelector("#swagger-ui");
+  if (!docs) return;
 
 window.ui = SwaggerUIBundle({
   url: docs.dataset.specUrl,
@@ -19,4 +21,5 @@ window.ui = SwaggerUIBundle({
     }
     return request;
   },
+});
 });

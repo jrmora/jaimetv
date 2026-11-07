@@ -1,6 +1,6 @@
 "use strict";
 
-(() => {
+window.jaimetvSpa.register(() => {
   const section = document.querySelector("#tmdb-section");
   if (!section) return;
   const content = section.querySelector("#tmdb-content");
@@ -104,4 +104,4 @@
     if (candidate) load(true, candidate.dataset.id);
   });
   load();
-})();
+});

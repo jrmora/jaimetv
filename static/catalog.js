@@ -1,14 +1,18 @@
-"use strict";
-
-const form = document.querySelector("#filters");
-const errorBox = document.querySelector("#error");
-const cardResults = document.querySelector("#card-results");
-const searchSpinner = document.querySelector("#search-spinner");
-const searchStatus = document.querySelector("#search-status");
-const genreControls = document.querySelector("#catalog-genres");
+window.jaimetvSpa.register(({ root, signal }) => {
+const form = root.querySelector("#filters");
+if (!form) return;
+const errorBox = root.querySelector("#error");
+const cardResults = root.querySelector("#card-results");
+const searchSpinner = root.querySelector("#search-spinner");
+const searchStatus = root.querySelector("#search-status");
+const genreControls = root.querySelector("#catalog-genres");
 let controller;
 let timer;
 let version = 0;
+signal.addEventListener("abort", () => {
+  clearTimeout(timer);
+  controller?.abort();
+});
 
 function updateChildrenCategories() {
   const toggle = form.querySelector("#children-toggle");
@@ -122,5 +126,6 @@ cardResults.addEventListener("click", (event) => {
   event.preventDefault();
   return load(Number(new URL(link.href).searchParams.get("page")), true);
 });
-document.addEventListener("movie-state-changed", () => load(Number(form.elements.page.value)));
+document.addEventListener("movie-state-changed", () => load(Number(form.elements.page.value)), { signal });
 updateChildrenCategories();
+});

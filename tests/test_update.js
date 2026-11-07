@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
+const { withSpa } = require("./spa-stub");
 
 function setup(responses) {
   const calls = [];
@@ -27,7 +28,7 @@ function setup(responses) {
     setTimeout: callback => timers.push(callback),
     location: { reload() { context.reloaded = true; } },
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/update.js"), "utf8"), context);
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/update.js"), "utf8"), withSpa(context));
   return { calls, timers, button, status, context, click: () => click() };
 }
 

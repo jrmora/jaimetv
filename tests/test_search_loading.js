@@ -5,6 +5,7 @@ const { readFileSync } = require("node:fs");
 const { join } = require("node:path");
 const { test } = require("node:test");
 const { runInNewContext } = require("node:vm");
+const { withSpa } = require("./spa-stub");
 
 const script = readFileSync(join(__dirname, "../static/catalog.js"), "utf8");
 
@@ -75,7 +76,7 @@ function fixture(kids = false) {
       addEventListener() {},
     },
   };
-  runInNewContext(script, context);
+  runInNewContext(script, withSpa(context));
   return {
     attributes, spinner, status, listeners, scrolls, genreUpdates, urls, kidsTab, kidsSelection,
     respond(total, extra = {}) { respond({ ok: true, json: async () => ({ html: "", page: 1, total, ...extra }) }); },

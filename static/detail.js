@@ -1,5 +1,6 @@
 "use strict";
 
+window.jaimetvSpa.register(() => {
 for (const image of document.querySelectorAll("img[data-error-id]")) {
   function showImageError() {
     image.hidden = true;
@@ -8,3 +9,4 @@ for (const image of document.querySelectorAll("img[data-error-id]")) {
   image.addEventListener("error", showImageError);
   if (image.complete && image.naturalWidth === 0) showImageError();
 }
+});

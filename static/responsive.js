@@ -1,9 +1,9 @@
 "use strict";
 
-(() => {
-  const filters = document.querySelector("#catalog-filters");
+  window.jaimetvSpa.register(({ root, signal }) => {
+  const filters = root.querySelector("#catalog-filters");
   if (!filters) return;
-  const toggle = document.querySelector("#filters-toggle");
+  const toggle = root.querySelector("#filters-toggle");
   const compact = matchMedia("(max-width: 1199.98px)");
   if (toggle) {
     filters.classList.add("has-filter-toggle");
@@ -22,6 +22,6 @@
       toggle.setAttribute("aria-expanded", String(filters.open));
     }
   };
-  compact.addEventListener("change", update);
+  compact.addEventListener("change", update, { signal });
   update();
-})();
+  });

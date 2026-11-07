@@ -5,6 +5,7 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const vm = require("node:vm");
 const path = require("node:path");
+const { withSpa } = require("./spa-stub");
 
 test("admin submits a single batch action and cancellation with CSRF", async () => {
   const elements = {};
@@ -26,7 +27,7 @@ test("admin submits a single batch action and cancellation with CSRF", async () 
     dataset: { batchEndpoint: "/api/tmdb/batch", csrf: "csrf-token" },
     querySelector: selector => elements[selector],
   };
-  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/admin.js"), "utf8"), {
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/admin.js"), "utf8"), withSpa({
     document: { querySelector: () => panel }, URLSearchParams,
     fetch: async (endpoint, options) => {
       if (options.method === "POST") posts.push(options.body);
@@ -34,7 +35,7 @@ test("admin submits a single batch action and cancellation with CSRF", async () 
     },
     clearTimeout() {}, setTimeout(callback) { timers.push(callback); },
     location: { reload() { reloads++; } },
-  });
+  }));
   const flush = () => new Promise(resolve => setImmediate(resolve));
   await flush();
   assert.equal(elements["#tmdb-kind"].disabled, false);
