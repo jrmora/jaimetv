@@ -44,7 +44,8 @@ class AuthTests(unittest.TestCase):
             self.assertEqual(self.client.get(path).location, "/login")
         for method, path in (("get", "/api/catalog/movies"), ("post", "/api/sync"),
                              ("get", "/api/docs"), ("get", "/api/openapi.json"),
-                             ("post", "/api/admin/console"), ("post", "/catalog/movies/1/watched")):
+                             ("post", "/api/admin/console"), ("post", "/api/admin/catalog-backup"),
+                             ("post", "/catalog/movies/1/watched")):
             response = getattr(self.client, method)(path)
             self.assertEqual(response.status_code, 401)
             self.assertIn("Server-Timing", response.headers)

@@ -1,0 +1,2 @@
+# Dependencias solo para experimentos locales del recomendador.
+scikit-learn>=1.6,<2

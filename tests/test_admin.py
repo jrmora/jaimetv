@@ -1,6 +1,8 @@
 import tempfile
 import unittest
 import re
+import sqlite3
+from contextlib import closing
 from html import unescape
 from urllib.parse import parse_qs, urlsplit
 from pathlib import Path
@@ -50,6 +52,30 @@ class AdministrationTests(unittest.TestCase):
 
     def test_diagnostic_console_requires_csrf(self):
         self.assertEqual(self.client.post("/api/admin/console", data={"command": "status"}).status_code, 400)
+
+    def test_catalog_backup_download_is_a_consistent_sqlite_snapshot(self):
+        store = self.app.config["CATALOG_STORE"]
+        store.replace(snapshot())
+        page = self.client.get("/admin")
+        self.assertIn(b'id="catalog-backup-download"', page.data)
+        with self.client.session_transaction() as session:
+            csrf = session["sync_csrf"]
+
+        with self.client.post("/api/admin/catalog-backup", data={"csrf": csrf}) as response:
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("attachment; filename=jaimetv-catalog-", response.headers["Content-Disposition"])
+            self.assertEqual(response.headers["Cache-Control"], "no-store")
+            backup_data = response.data
+
+        backup_path = Path(self.temp.name) / "downloaded-catalog.sqlite3"
+        backup_path.write_bytes(backup_data)
+        with closing(sqlite3.connect(backup_path)) as backup:
+            self.assertEqual(backup.execute("SELECT COUNT(*) FROM movies").fetchone()[0], 4)
+            self.assertEqual(backup.execute("SELECT COUNT(*) FROM series").fetchone()[0], 1)
+            self.assertEqual(backup.execute("SELECT COUNT(*) FROM tmdb_metadata").fetchone()[0], 0)
+
+    def test_catalog_backup_download_requires_csrf(self):
+        self.assertEqual(self.client.post("/api/admin/catalog-backup").status_code, 400)
 
     def test_coverage_only_appears_in_administration(self):
         for kind in ("movies", "series"):

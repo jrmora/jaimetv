@@ -8,6 +8,7 @@ import secrets
 import shutil
 import sqlite3
 import sys
+import tempfile
 import threading
 import time
 from collections import deque
@@ -16,7 +17,7 @@ from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pandas as pd
-from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from openapi import build_openapi_spec
 from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image, PERFORMANCE_TIMINGS
@@ -490,6 +491,41 @@ def create_app(db_path=None):
         else:
             abort(400, description="Comando no permitido. Escribe help para ver los comandos disponibles.")
         return jsonify(command=command, output=output)
+
+    @app.post("/api/admin/catalog-backup")
+    def catalog_backup_download():
+        check_sync_csrf()
+        file_descriptor, backup_path = tempfile.mkstemp(prefix="jaimetv-catalog-", suffix=".sqlite3")
+        os.close(file_descriptor)
+        source = None
+        destination = None
+        try:
+            source = sqlite3.connect(store.path, timeout=30)
+            destination = sqlite3.connect(backup_path)
+            source.backup(destination)
+            destination.close()
+            destination = None
+            source.close()
+            source = None
+            filename = f"jaimetv-catalog-{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}.sqlite3"
+            response = send_file(
+                backup_path,
+                mimetype="application/vnd.sqlite3",
+                as_attachment=True,
+                download_name=filename,
+                conditional=False,
+            )
+            response.headers["Cache-Control"] = "no-store"
+            response.call_on_close(lambda: Path(backup_path).unlink(missing_ok=True))
+            return response
+        except (OSError, sqlite3.Error):
+            if source is not None:
+                source.close()
+            if destination is not None:
+                destination.close()
+            Path(backup_path).unlink(missing_ok=True)
+            app.logger.error("No se pudo crear la copia local del catálogo SQLite.")
+            abort(503, description="No se pudo crear la copia de la base de datos.")
 
     @app.get("/api/docs")
     def api_docs():
