@@ -251,7 +251,7 @@ class ProviderFilterTests(unittest.TestCase):
         movies_html = self.client.get("/movies").get_data(as_text=True)
         self.assertIn('alt="Netflix"', movies_html)
         self.assertIn('alt="Amazon Prime Video"', movies_html)
-        provider_html = self.client.get("/movies?provider=Netflix").get_data(as_text=True)
+        provider_html = self.client.get("/movies?provider=Netflix").get_data(as_text=True).split('class="catalog-grid"')[1]
         self.assertIn('alt="Netflix"', provider_html)
         self.assertNotIn('alt="Amazon Prime Video"', provider_html)
 

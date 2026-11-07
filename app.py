@@ -571,6 +571,7 @@ def create_app(db_path=None):
                 if item["category_name"].casefold() in {name.casefold() for name in CHILDREN_CATEGORIES[kind]}
             },
             genres=genres, movie_eras=MOVIE_ERAS, kids_categories=KIDS_CATEGORIES,
+            streaming_choices=provider_icons({"choices": ["Netflix", "Amazon Prime Video"]})["choices"],
             selected_categories=filters["category"] if isinstance(filters["category"], list) else ([filters["category"]] if filters["category"] else []),
             pagination=page_links(result, "kids_listing" if kids else "listing", dict(kind=kind, **filters)),
         )

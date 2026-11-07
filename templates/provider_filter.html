@@ -1,14 +1,21 @@
-<details id="provider-filter" class="border rounded" open>
-  <summary class="fw-semibold p-2">Dónde se puede ver</summary>
-  <div class="p-2 border-top">
-    {% set selected = filters.get('provider', []) %}
-    <div class="provider-scope">
-      {% for label, value in [('Todas', ''), ('Netflix', 'Netflix'), ('Amazon Prime Video', 'Amazon Prime Video')] %}
-      <label class="small">
-        <input class="form-check-input flex-shrink-0" type="radio" name="provider" value="{{ value }}" {% if (value and selected == [value]) or (not value and not selected) %}checked{% endif %}>
-        <span>{{ label }}</span>
-      </label>
-      {% endfor %}
-    </div>
+<fieldset id="provider-filter">
+  <legend class="fs-6">Dónde se puede ver</legend>
+  {% set selected = filters.get('provider', []) %}
+  <div class="form-check">
+    <input class="form-check-input" type="radio" name="provider" id="provider-all" value="" {% if not selected %}checked{% endif %}>
+    <label class="form-check-label" for="provider-all">Todas</label>
   </div>
-</details>
+  {% for provider in streaming_choices %}
+  <div class="form-check">
+    <input class="form-check-input" type="radio" name="provider" id="provider-{{ loop.index }}" value="{{ provider.name }}" {% if selected == [provider.name] %}checked{% endif %}>
+    <label class="form-check-label d-inline-flex align-items-center" for="provider-{{ loop.index }}" title="{{ provider.name }}">
+      {% if provider.filename %}
+      <img src="{{ url_for('static', filename=provider.filename) }}" width="28" height="28" class="rounded" alt="{{ provider.name }}" loading="lazy">
+      <span class="visually-hidden">{{ provider.name }}</span>
+      {% else %}
+      {{ provider.name }}
+      {% endif %}
+    </label>
+  </div>
+  {% endfor %}
+</fieldset>

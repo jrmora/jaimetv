@@ -1286,20 +1286,23 @@ class CatalogStore:
 
             projection_params = []
             provider_projection = ""
-            if my_services == 1 and selected_providers:
-                platform_condition = f"AND PLATFORM_NAME(provider.value) IN ({','.join('?' for _ in selected_providers)})"
-                # Only project service logos when the user explicitly asks for their services.
+            if my_services == 1:
+                logo_providers = selected_providers
+            elif my_services == 0:
+                logo_providers = selected_providers or self.subscriptions()
+            else:
+                logo_providers = []
+            if logo_providers:
+                platform_condition = f"AND PLATFORM_NAME(provider.value) IN ({','.join('?' for _ in logo_providers)})"
+                # Project only the logos relevant to the selected display mode.
                 provider_projection = f""", (
                     SELECT json_group_array(DISTINCT PLATFORM_NAME(provider.value))
-                    FROM tmdb_metadata m, json_each(m.payload, '$.providers') availability,
+                    FROM json_each(score.payload, '$.providers') availability,
                         json_each(availability.value) provider
-                    WHERE m.kind=? AND m.record_id=s.{key} AND m.country='CA'
-                        AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                        AND json_extract(m.payload, '$.status')='matched'
-                        AND (?='all' OR availability.key=?)
+                    WHERE (?='all' OR availability.key=?)
                         {platform_condition}
                 ) AS matched_services"""
-                projection_params.extend((kind, access, access, *selected_providers))
+                projection_params.extend((access, access, *logo_providers))
             query_params = list(params)
             if sort_by == "rating":
                 started = time.perf_counter()
@@ -1351,7 +1354,8 @@ class CatalogStore:
             item["unavailable"] = bool(item["unavailable"])
             item["banned"] = bool(item["banned"])
             item["watched"] = bool(item["watched"])
-            item["matched_services"] = sorted(json.loads(item.pop("matched_services", None) or "[]"), key=str.casefold)
+            if "matched_services" in item:
+                item["matched_services"] = sorted(json.loads(item["matched_services"] or "[]"), key=str.casefold)
             item["trailer_url"] = youtube_trailer_url(item.pop("youtube_trailer"))
             icon, cover = item.pop("preview_icon"), item.pop("preview_cover")
             item["poster_url"] = valid_image(icon) or valid_image(cover)

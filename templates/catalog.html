@@ -61,17 +61,6 @@
     </div>
     {% endfor %}
   </fieldset>
-  {% if kind == 'movies' %}
-  <fieldset class="filter-chips">
-    <legend class="fs-6">Época</legend>
-    {% for value, label in movie_eras.items() %}
-    <div class="form-check">
-      <input class="form-check-input" type="checkbox" name="era" id="era-{{ value }}" value="{{ value }}" {% if value in filters.get('era', []) %}checked{% endif %}>
-      <label class="form-check-label" for="era-{{ value }}">{{ label }}</label>
-    </div>
-    {% endfor %}
-  </fieldset>
-  {% endif %}
   <div>
     <input type="hidden" name="ordering" id="ordering" value="{{ filters.sort_by }}:{{ filters.sort }}">
     <div class="d-flex flex-wrap gap-2 mb-2" role="group" aria-label="Orden rápido">
@@ -107,6 +96,17 @@
   {% endif %}
   {% if kind in ['movies', 'series'] %}
   {% include "provider_filter.html" %}
+  {% endif %}
+  {% if kind == 'movies' %}
+  <fieldset class="filter-chips">
+    <legend class="fs-6">Época</legend>
+    {% for value, label in movie_eras.items() %}
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="era" id="era-{{ value }}" value="{{ value }}" {% if value in filters.get('era', []) %}checked{% endif %}>
+      <label class="form-check-label" for="era-{{ value }}">{{ label }}</label>
+    </div>
+    {% endfor %}
+  </fieldset>
   {% endif %}
   <div class="d-flex flex-wrap gap-2">
     <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view, **({'watchlist': 1} if filters.get('watchlist') else {})) }}">Limpiar filtros</a>
