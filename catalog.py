@@ -61,13 +61,12 @@ CHILDREN_CATEGORIES = {
 }
 
 PROVIDER_ACCESS = {"all", "flatrate", "rent", "buy", "free", "ads"}
-TMDB_STATUSES = {"all", "matched", "candidates", "missing", "pending"}
 MOVIE_ERAS = {
-    "recent": ("Recientes", "2015 en adelante"),
-    "modern": ("Modernas", "2000–2014"),
-    "nostalgia": ("Nostalgia", "1980–1999"),
-    "classic": ("Clásicas", "Antes de 1980"),
-    "unknown": ("Sin año conocido", ""),
+    "recent": "2015 en adelante",
+    "modern": "2000–2014",
+    "nostalgia": "1980–1999",
+    "classic": "Antes de 1980",
+    "unknown": "Sin año conocido",
 }
 SERVICES_PATH = Path(__file__).resolve().with_name("services.json")
 SYNC_CHANGE_LISTS = (
@@ -1071,7 +1070,9 @@ class CatalogStore:
                 names.setdefault(name.casefold(), name)
         return sorted(names.values(), key=str.casefold)
 
-    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", tmdb_status="all", era=None, watchlist=False, include_genres=False, kids_category=None):
+    def query(self, kind, q="", category=None, sort="asc", sort_by="name", actor="", director="", person="", foreign=None, children="all", page=None, genre=None, provider=None, my_services: int = 0, access="flatrate", watched="all", banned="hide", era=None, watchlist=False, include_genres=False, kids_category=None):
+        if kind not in KINDS:
+            raise ValueError("Tipo de catálogo inválido.")
         table, categories, key = KINDS[kind]
         if page is not None and (isinstance(page, bool) or not isinstance(page, int) or page < 1):
             raise ValueError("Página inválida.")
@@ -1095,8 +1096,6 @@ class CatalogStore:
             raise ValueError("Filtro de títulos vistos inválido.")
         if banned not in {"hide", "only"}:
             raise ValueError("Filtro de películas bloqueadas inválido.")
-        if tmdb_status not in TMDB_STATUSES:
-            raise ValueError("Estado TMDB inválido.")
         eras = era if isinstance(era, list) else ([era] if era else [])
         if any(value not in MOVIE_ERAS for value in eras) or (eras and kind != "movies"):
             raise ValueError("Época de películas inválida.")
@@ -1120,6 +1119,19 @@ class CatalogStore:
         watchlist_expression = "versions.watchlisted"
         if watchlist:
             conditions.append(watchlist_expression)
+        selected_categories = category if isinstance(category, list) else ([category] if category is not None else [])
+        selected_categories = list(dict.fromkeys(text(value) for value in selected_categories if value is not None))
+        category_conditions = []
+        if "__uncategorized__" in selected_categories:
+            category_conditions.append("(s.category_id IS NULL OR TRIM(s.category_id)='')")
+            selected_categories.remove("__uncategorized__")
+        if selected_categories:
+            category_conditions.append(
+                f"s.category_id IN ({','.join('?' for _ in selected_categories)})"
+            )
+            params.extend(selected_categories)
+        if category_conditions:
+            conditions.append("(" + " OR ".join(category_conditions) + ")")
         if eras:
             era_conditions = {
                 "recent": f"{year} >= 2015",
@@ -1129,18 +1141,6 @@ class CatalogStore:
                 "unknown": f"{year} IS NULL",
             }
             conditions.append("(" + " OR ".join(era_conditions[value] for value in dict.fromkeys(eras)) + ")")
-        if tmdb_status != "all":
-            status_condition = "" if tmdb_status == "pending" else "AND json_extract(m.payload, '$.status')=?"
-            cached = f"""EXISTS (
-                SELECT 1 FROM tmdb_metadata m
-                WHERE m.kind=? AND m.record_id=s.{key} AND m.country='CA'
-                    AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
-                    {status_condition}
-            )"""
-            conditions.append(f"NOT {cached}" if tmdb_status == "pending" else cached)
-            params.append(kind)
-            if tmdb_status != "pending":
-                params.append(tmdb_status)
         banned_expression = "versions.banned"
         conditions.append(banned_expression if banned == "only" else f"NOT {banned_expression}")
         watched_expression = "versions.watched"
@@ -1283,9 +1283,12 @@ class CatalogStore:
                 record_timing("genre_facets", started)
             total = None
             limit = ""
-            provider_projection = ""
+
             projection_params = []
+            provider_projection = ""
             if my_services == 1 and selected_providers:
+                platform_condition = f"AND PLATFORM_NAME(provider.value) IN ({','.join('?' for _ in selected_providers)})"
+                # Only project service logos when the user explicitly asks for their services.
                 provider_projection = f""", (
                     SELECT json_group_array(DISTINCT PLATFORM_NAME(provider.value))
                     FROM tmdb_metadata m, json_each(m.payload, '$.providers') availability,
@@ -1294,7 +1297,7 @@ class CatalogStore:
                         AND m.fingerprint=TITLE_FINGERPRINT(s.raw_json)
                         AND json_extract(m.payload, '$.status')='matched'
                         AND (?='all' OR availability.key=?)
-                        AND PLATFORM_NAME(provider.value) IN ({','.join('?' for _ in selected_providers)})
+                        {platform_condition}
                 ) AS matched_services"""
                 projection_params.extend((kind, access, access, *selected_providers))
             query_params = list(params)
@@ -1348,8 +1351,7 @@ class CatalogStore:
             item["unavailable"] = bool(item["unavailable"])
             item["banned"] = bool(item["banned"])
             item["watched"] = bool(item["watched"])
-            if my_services == 1:
-                item["matched_services"] = sorted(json.loads(item.pop("matched_services", "[]")), key=str.casefold)
+            item["matched_services"] = sorted(json.loads(item.pop("matched_services", None) or "[]"), key=str.casefold)
             item["trailer_url"] = youtube_trailer_url(item.pop("youtube_trailer"))
             icon, cover = item.pop("preview_icon"), item.pop("preview_cover")
             item["poster_url"] = valid_image(icon) or valid_image(cover)

@@ -82,9 +82,6 @@ td { overflow-wrap: anywhere; }
 .tmdb-coverage-progress::-webkit-progress-bar { background: var(--bs-secondary-bg); }
 .tmdb-coverage-progress::-webkit-progress-value { background: var(--bs-primary); }
 .tmdb-coverage-progress::-moz-progress-bar { background: var(--bs-primary); }
-.service-scope { display: grid; gap: 0.25rem; }
-.service-scope label { display: flex; align-items: center; gap: 0.5rem; min-width: 0; min-height: 28px; overflow-wrap: anywhere; cursor: pointer; }
-.service-scope .form-check-input { margin-top: 0; }
 .filter-chips .btn { font-size: 0.8rem; padding: 0.3rem 0.65rem; white-space: normal; text-align: left; }
 .filter-chips .btn-check:checked + .btn { background-color: var(--bs-info); border-color: var(--bs-info); color: #000; }
 .filter-chips .btn-check:focus-visible + .btn { outline: 3px solid var(--bs-primary); outline-offset: 2px; }
@@ -93,12 +90,6 @@ td { overflow-wrap: anywhere; }
 .card-service-logo { object-fit: contain; background: var(--bs-tertiary-bg); }
 .provider-tooltip { display: none; position: absolute; bottom: 100%; left: 0; z-index: 2; padding: 0.4rem; border-radius: 0.25rem; background: var(--bs-emphasis-color); color: var(--bs-body-bg); width: max-content; max-width: 200px; font-size: 0.8rem; }
 .provider-badge:hover .provider-tooltip, .provider-badge:focus .provider-tooltip { display: block; }
-.provider-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0.4rem; max-height: 22rem; overflow-y: auto; padding: 0.25rem; }
-.provider-choice { display: flex; align-items: center; justify-content: center; min-height: 46px; padding: 2px; border: 2px solid transparent; cursor: pointer; background: var(--bs-body-bg); }
-.provider-choice img { max-width: 100%; height: auto; border-radius: 0.4rem; }
-.provider-filter-fallback { font-size: 0.6rem; overflow-wrap: anywhere; text-align: center; }
-.provider-option .btn-check:checked + .provider-choice { border-color: var(--bs-info); box-shadow: 0 0 0 1px var(--bs-info); }
-.provider-option .btn-check:focus-visible + .provider-choice { outline: 3px solid var(--bs-primary); outline-offset: 1px; }
 .catalog-sidebar > summary { min-height: 44px; cursor: pointer; }
 @media (min-width: 1200px) {
   .catalog-sidebar > summary { display: none; }

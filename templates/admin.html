@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Administración · JaimeTV{% endblock %}
+{% block title %}Administración · PickIA{% endblock %}
 {% block page_heading %}Administración{% endblock %}
 {% block content %}
 {% macro last_update(key, label) %}
@@ -109,7 +109,7 @@
           <tbody>
             {% for catalog_kind, counts in coverages.items() %}
             {% set percent = (100 * counts.checked / counts.total)|round(1) if counts.total else 0 %}
-            <tr data-coverage-kind="{{ catalog_kind }}"><th scope="row"><a href="{{ url_for('listing', kind=catalog_kind, children='all', watched='all') }}">{{ labels[catalog_kind] }}</a></th><td>{{ counts.total }}</td><td>{{ counts.checked }}</td><td>{{ counts.matched }}</td><td><a href="{{ url_for('listing', kind=catalog_kind, tmdb_status='candidates', children='all', foreign=0, watched='all') }}" aria-label="{{ labels[catalog_kind] }} por elegir: {{ counts.candidates }}">{{ counts.candidates }}</a></td><td>{{ counts.missing }}</td><td>{{ counts.pending }}</td>
+            <tr data-coverage-kind="{{ catalog_kind }}"><th scope="row"><a href="{{ url_for('listing', kind=catalog_kind, children='all', watched='all') }}">{{ labels[catalog_kind] }}</a></th><td>{{ counts.total }}</td><td>{{ counts.checked }}</td><td>{{ counts.matched }}</td><td>{{ counts.candidates }}</td><td>{{ counts.missing }}</td><td>{{ counts.pending }}</td>
               <td>
                 <span>{{ percent }} %</span>
                 <progress class="tmdb-coverage-progress" value="{{ percent }}" max="100" aria-label="{{ labels[catalog_kind] }} consultadas en TMDB" aria-valuenow="{{ percent }}">{{ percent }} %</progress>

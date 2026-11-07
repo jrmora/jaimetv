@@ -20,7 +20,7 @@ import pandas as pd
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, send_file, session, url_for
 
 from openapi import build_openapi_spec
-from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image, PERFORMANCE_TIMINGS
+from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image, PERFORMANCE_TIMINGS
 from xtream import CatalogError, XtreamClient
 from tmdb import TMDBClient, TMDBError, TMDBRateLimitError, enrich, fingerprint, recommended_titles
 from provider_logos import provider_icons
@@ -279,9 +279,6 @@ def create_app(db_path=None):
         eras = list(dict.fromkeys(request.args.getlist("era")))
         if any(value not in MOVIE_ERAS for value in eras) or (eras and kind not in {None, "movies"}):
             abort(400, description="Época de películas inválida.")
-        tmdb_status = request.args.get("tmdb_status", "all")
-        if tmdb_status not in TMDB_STATUSES:
-            abort(400, description="Estado TMDB inválido.")
         watched = request.args.get("watched", "unseen" if kind in KINDS else "all")
         banned = request.args.get("banned", "hide")
         if banned not in {"hide", "only"}:
@@ -315,8 +312,6 @@ def create_app(db_path=None):
             values["watched"] = watched
         if "banned" in request.args:
             values["banned"] = banned
-        if "tmdb_status" in request.args:
-            values["tmdb_status"] = tmdb_status
         if eras:
             values["era"] = eras
         kids_categories = list(dict.fromkeys(request.args.getlist("kids_category")))
@@ -549,35 +544,33 @@ def create_app(db_path=None):
         elif filters["children"] == "only":
             return redirect(url_for("kids_listing", kind=kind, **filters))
         view = presentation()
-        result = store.query(kind, **filters, page=page_number(), include_genres=True)
-        filters["genre"] = result.pop("selected_genres")
-        genres = result.pop("available_genres")
-        card_provider_icons(result)
-        filters.update(view=view, page=result.get("page", 1))
+        shell = request.args.get("shell") == "1" and view == "cards" and not request.args.getlist("genre")
+        if shell:
+            result, genres = {}, []
+            filters.update(view=view, page=page_number())
+        else:
+            result = store.query(kind, **filters, page=page_number(), include_genres=True)
+            filters["genre"] = result.pop("selected_genres")
+            genres = result.pop("available_genres")
+            card_provider_icons(result)
+            filters.update(view=view, page=result.get("page", 1))
         foreign = bool(filters["foreign"])
         categories = []
         if kids:
             categories = [item for item in categories if item["category_name"].casefold() in {
                 name.casefold() for name in CHILDREN_CATEGORIES[kind]
             }]
-        names = []
-        if kind in {"movies", "series"}:
-            names = ordered_platforms(
-                set(store.provider_names(kind)) | set(store.subscriptions()) | set(filters.get("provider", [])),
-            )
         return render_template(
             "catalog.html", kind=kind,
             title=f"Niños · {LABELS[kind]}" if kids else (f"Otros alfabetos · {LABELS[kind]}" if foreign else LABELS[kind]),
             active="kids" if kids else ("foreign" if foreign else kind),
-            kids=kids, listing_endpoint="kids_listing" if kids else "listing",
+            kids=kids, listing_endpoint="kids_listing" if kids else "listing", shell=shell,
             labels=LABELS, categories=categories, filters=filters, result=result,
             children_category_ids={
                 item["category_id"] for item in categories
                 if item["category_name"].casefold() in {name.casefold() for name in CHILDREN_CATEGORIES[kind]}
             },
             genres=genres, movie_eras=MOVIE_ERAS, kids_categories=KIDS_CATEGORIES,
-            provider_options=provider_icons({"all": names})["all"],
-            subscriptions=ordered_platforms(store.subscriptions()),
             selected_categories=filters["category"] if isinstance(filters["category"], list) else ([filters["category"]] if filters["category"] else []),
             pagination=page_links(result, "kids_listing" if kids else "listing", dict(kind=kind, **filters)),
         )

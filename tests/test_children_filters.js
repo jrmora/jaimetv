@@ -10,7 +10,7 @@ const { withSpa } = require("./spa-stub");
 const script = readFileSync(join(__dirname, "../static/catalog.js"), "utf8");
 
 function runCatalog(form) {
-  const cardResults = { addEventListener() {}, setAttribute() {} };
+  const cardResults = { addEventListener() {}, setAttribute() {}, hasAttribute() { return false; } };
   form.addEventListener = () => {};
   const root = {
     querySelector: selector => (selector === "#filters" ? form : selector === "#card-results" ? cardResults : null),

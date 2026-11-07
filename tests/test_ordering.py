@@ -25,7 +25,7 @@ class OrderingTests(unittest.TestCase):
                         self.assertEqual(combined.status_code, 200)
                         self.assertEqual(combined.json["items"], legacy.json["items"])
                         page = self.client.get(f"/{kind}?ordering={column}:{direction}").get_data(as_text=True)
-                        self.assertIn(f'value="{column}:{direction}" selected', page)
+                        self.assertIn(f'id="ordering" value="{column}:{direction}"', page)
                         self.assertNotIn('id="sort"', page)
 
     def test_invalid_combined_order_is_rejected(self):
@@ -38,8 +38,9 @@ class OrderingTests(unittest.TestCase):
                 page = self.client.get(f"{path}?ordering=votes:desc")
                 self.assertEqual(page.status_code, 200)
                 html = page.get_data(as_text=True)
-                self.assertIn('value="votes:desc" selected', html)
-                self.assertIn("Votos · Más votadas primero", html)
+                self.assertIn('id="ordering" value="votes:desc"', html)
+                self.assertIn('data-ordering="votes:desc" aria-pressed="true"', html)
+                self.assertIn("Más votadas primero", html)
                 self.assertNotIn('value="votes:asc"', html)
         combined = self.client.get("/api/catalog/movies?ordering=votes:desc")
         legacy = self.client.get("/api/catalog/movies?sort_by=votes&sort=desc")

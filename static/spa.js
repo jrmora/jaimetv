@@ -59,12 +59,24 @@
     document.title = doc.title;
   }
 
+  function withShell(url) {
+    const shell = new URL(url);
+    shell.searchParams.set("shell", "1");
+    return shell.href;
+  }
+
+  function withoutShell(url) {
+    const clean = new URL(url);
+    clean.searchParams.delete("shell");
+    return clean.href;
+  }
+
   async function navigate(url, { push }) {
     const current = ++token;
     let response;
     let html;
     try {
-      response = await fetch(url, { headers: { Accept: "text/html" } });
+      response = await fetch(push ? withShell(url) : url, { headers: { Accept: "text/html" } });
       if (!response.ok || !(response.headers.get("content-type") || "").includes("text/html")) {
         throw new Error("La respuesta no es una página HTML");
       }
@@ -88,7 +100,7 @@
     syncStyles(doc);
     swapContent(doc);
     if (push) {
-      history.pushState(null, "", response.url || url);
+      history.pushState(null, "", withoutShell(response.url || url));
       window.scrollTo({ top: 0, behavior: "instant" });
     }
     rendered = location.pathname + location.search;

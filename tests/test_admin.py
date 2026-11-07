@@ -89,7 +89,6 @@ class AdministrationTests(unittest.TestCase):
             coverage.assert_not_called()
             self.assertNotIn("Cobertura TMDB", page)
             self.assertNotIn("títulos consultados", page)
-            self.assertIn('id="tmdb-status"', page)
 
     def test_update_button_only_on_admin_when_configured(self):
         with patch.dict("os.environ", {"IPTV_UPDATE_STATE": str(Path(self.temp.name) / "state")}):
@@ -209,22 +208,3 @@ class AdministrationTests(unittest.TestCase):
         write_state(state, status="failed")
         page = app.test_client().get("/admin").get_data(as_text=True)
         self.assertIn('datetime="2026-10-23T12:00:00+00:00"', page)
-
-    def test_candidate_counts_link_to_unrestricted_candidate_listing(self):
-        store = self.app.config["CATALOG_STORE"]
-        store.replace(snapshot())
-        for kind, record_id in (("movies", "10"), ("series", "20")):
-            raw = store.detail(kind, record_id)["data"]
-            store.save_tmdb(kind, record_id, "CA", fingerprint(raw), {"status": "candidates"})
-        store.set_movie_watched("10", True)
-        page = self.client.get("/admin").get_data(as_text=True)
-        for kind in ("movies", "series"):
-            row = re.search(rf'<tr data-coverage-kind="{kind}">(.*?)</tr>', page, re.S).group(1)
-            link = unescape(re.search(r'<td><a href="([^"]+)"', row).group(1))
-            params = parse_qs(urlsplit(link).query)
-            self.assertEqual(params["tmdb_status"], ["candidates"])
-            self.assertEqual(params["children"], ["all"])
-            self.assertEqual(params["watched"], ["all"])
-            response = self.client.get(link)
-            self.assertEqual(response.status_code, 200)
-            self.assertIn(b"Batman", response.data)

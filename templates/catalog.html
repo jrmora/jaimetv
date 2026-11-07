@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ title }} · JaimeTV{% endblock %}
+{% block title %}{{ title }} · PickIA{% endblock %}
 {% block page_heading %}{{ title }}{% endblock %}
 {% block main_class %}catalog-page{% endblock %}
 {% block content %}
@@ -60,35 +60,40 @@
       <label class="form-check-label" for="watched-{{ value }}">{{ label }}</label>
     </div>
     {% endfor %}
-    <p class="small text-muted mb-0">Al buscar también aparecen las vistas, con el ojo activado.</p>
   </fieldset>
   {% if kind == 'movies' %}
   <fieldset class="filter-chips">
     <legend class="fs-6">Época</legend>
-    {% for value, labels in movie_eras.items() %}
+    {% for value, label in movie_eras.items() %}
     <div class="form-check">
       <input class="form-check-input" type="checkbox" name="era" id="era-{{ value }}" value="{{ value }}" {% if value in filters.get('era', []) %}checked{% endif %}>
-      <label class="form-check-label" for="era-{{ value }}">{{ labels[0] }}{% if labels[1] %} <span class="small text-muted">({{ labels[1] }})</span>{% endif %}</label>
+      <label class="form-check-label" for="era-{{ value }}">{{ label }}</label>
     </div>
     {% endfor %}
   </fieldset>
   {% endif %}
   <div>
+    <input type="hidden" name="ordering" id="ordering" value="{{ filters.sort_by }}:{{ filters.sort }}">
+    <div class="d-flex flex-wrap gap-2 mb-2" role="group" aria-label="Orden rápido">
+      {% for value, label in [('rating:desc', 'Más fiables primero'), ('votes:desc', 'Más votadas primero')] %}
+      {% set active = (filters.sort_by ~ ':' ~ filters.sort) == value %}
+      <button type="button" class="btn btn-sm rounded-pill {{ 'btn-primary' if active else 'btn-outline-primary' }}" data-ordering="{{ value }}" aria-pressed="{{ 'true' if active else 'false' }}">{{ label }}</button>
+      {% endfor %}
+    </div>
     <label for="sort-by" class="form-label">Ordenar por</label>
-    <select id="sort-by" name="ordering" class="form-select">
-      {% for column, label, ascending, descending in [
-        ('name', 'Nombre', 'A–Z', 'Z–A'),
-        ('category_name', 'Género TMDB', 'A–Z', 'Z–A'),
-        ('year', 'Año', 'Más antiguas primero', 'Más recientes primero'),
-        ('rating', 'Valoración', 'Ponderada de menor a mayor', 'Más fiables primero')
+    <select id="sort-by" class="form-select">
+      {% set quick = (filters.sort_by ~ ':' ~ filters.sort) in ['rating:desc', 'votes:desc'] %}
+      <option value="" disabled hidden {% if quick %}selected{% endif %}>Otro orden</option>
+      {% for column, direction, label in [
+        ('name', 'asc', 'Nombre · A–Z'), ('name', 'desc', 'Nombre · Z–A'),
+        ('year', 'asc', 'Año · Más antiguas primero'), ('year', 'desc', 'Año · Más recientes primero'),
+        ('rating', 'asc', 'Valoración · Ponderada de menor a mayor')
       ] %}
-      {% for direction, description in [('asc', ascending), ('desc', descending)] %}
-      <option value="{{ column }}:{{ direction }}" {% if filters.sort_by == column and filters.sort == direction %}selected{% endif %}>{{ label }} · {{ description }}</option>
+      <option value="{{ column }}:{{ direction }}" {% if not quick and filters.sort_by == column and filters.sort == direction %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
-      {% endfor %}
-      <option value="votes:desc" {% if filters.sort_by == 'votes' and filters.sort == 'desc' %}selected{% endif %}>Votos · Más votadas primero</option>
     </select>
   </div>
+
   {% if kids %}
   <input type="hidden" name="children" value="only">
   {% else %}
@@ -102,14 +107,6 @@
   {% endif %}
   {% if kind in ['movies', 'series'] %}
   {% include "provider_filter.html" %}
-  <div>
-    <label for="tmdb-status" class="form-label small">Estado TMDB</label>
-    <select id="tmdb-status" name="tmdb_status" class="form-select form-select-sm">
-      {% for value, label in [('all', 'Todos'), ('candidates', 'Por elegir'), ('matched', 'Asociados'), ('missing', 'Sin coincidencia'), ('pending', 'Pendientes')] %}
-      <option value="{{ value }}" {% if filters.get('tmdb_status', 'all') == value %}selected{% endif %}>{{ label }}</option>
-      {% endfor %}
-    </select>
-  </div>
   {% endif %}
   <div class="d-flex flex-wrap gap-2">
     <a id="clear-filters" class="btn btn-outline-secondary" href="{{ url_for(listing_endpoint, kind=kind, foreign=filters.foreign, children=filters.children, view=filters.view, **({'watchlist': 1} if filters.get('watchlist') else {})) }}">Limpiar filtros</a>
@@ -138,10 +135,14 @@
   </div>
 </fieldset>
 {% endif %}
-<div id="catalog-genres">{% include "genre_filter.html" %}</div>
+<div id="catalog-genres">{% if not shell %}{% include "genre_filter.html" %}{% endif %}</div>
 <div id="error" class="alert alert-danger mt-3" role="alert" hidden></div>
-<div id="card-results">
+<div id="card-results"{% if shell %} data-autoload{% endif %}>
+  {% if shell %}
+  <p class="text-secondary text-center py-5" role="status">Cargando resultados…</p>
+  {% else %}
   {% include "cards.html" %}
+  {% endif %}
 </div>
 </section>
 </div>
@@ -149,6 +150,5 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='cards.js') }}" defer></script>
 <script src="{{ url_for('static', filename='catalog.js') }}" defer></script>
-<script src="{{ url_for('static', filename='providers.js') }}" defer></script>
 <script src="{{ url_for('static', filename='responsive.js') }}" defer></script>
 {% endblock %}

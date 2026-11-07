@@ -70,6 +70,9 @@ al pasar el cursor o enfocar el icono; los planes y canales no se fusionan.
 
 ### Filtro «Dónde se puede ver»
 
+El panel ofrece tres opciones: «Todas» (predeterminada), «Netflix» y
+«Amazon Prime Video».
+
 El orden web predeterminado es «Valoración · Más fiables primero». Para ordenar,
 se usa `(votos × nota + 100 × media) / (votos + 100)`, donde la media es la
 media de notas válidas del catálogo correspondiente (películas o series),
@@ -309,9 +312,9 @@ retira de todas las versiones asociadas actualmente. No se borran ni fusionan
 los JSON del proveedor, y una sincronización conserva estas preferencias.
 La valoración ponderada cuenta cada título una sola vez al calcular la media.
 
-El filtro **Época** de películas permite combinar **Recientes**
-(2015 en adelante), **Modernas** (2000–2014), **Nostalgia** (1980–1999),
-**Clásicas** (antes de 1980) y **Sin año conocido**. Sin selección incluye todas.
+El filtro **Época** de películas permite combinar los rangos
+2015 en adelante, 2000–2014, 1980–1999, Antes de 1980 y Sin año conocido.
+Sin selección incluye todas.
 Las épocas se combinan con O y con los demás filtros con Y, también con
 **Volver a ver**. Se aplica antes de contar y paginar.
 Usa exclusivamente el estreno de la caché TMDB confirmada y vigente de Canadá;
@@ -354,15 +357,6 @@ Se conservan al cerrar la aplicación y sincronizar el catálogo; guarda una cop
 de la base de datos para respaldarlas. No se consulta ninguna API al marcar.
 
 #### Ampliar cobertura por lotes
-
-En **Cobertura TMDB → Estado TMDB** puedes filtrar por **Por elegir** para abrir
-las fichas con candidatos y seleccionar la obra correcta. También están
-**Asociados**, **Sin coincidencia**, **Pendientes** y **Todos**. Usa únicamente
-la caché vigente de Canadá, sin consultas externas. Se combina con los demás
-filtros y la paginación; los filtros de plataformas requieren coincidencias
-confirmadas, así que para revisar candidatos selecciona todas las plataformas
-y desmarca los logos. Las películas bloqueadas siguen ocultas. Los totales de
-cobertura corresponden al catálogo completo, no a la selección filtrada.
 
 **Consultar pendientes con TMDB** es el único botón de inicio: primero actualiza
 los directorios de plataformas de películas y series para Canadá y después procesa entre
@@ -654,11 +648,9 @@ Las fechas persisten entre reinicios; las operaciones antiguas sin fecha
 registrada muestran «Sin registro de actualización». Un intento fallido no
 reemplaza la última comprobación correcta de la aplicación.
 El resumen «Cobertura TMDB» solo aparece en Administración; los listados
-conservan el filtro por estado TMDB, pero no muestran los contadores de cobertura.
+no muestran contadores de cobertura.
 La cobertura muestra simultáneamente películas y series en filas separadas,
 con total, consultados, asociados, por elegir, sin coincidencia y pendientes.
-El número «Por elegir» enlaza al listado de candidatos de ese catálogo,
-incluyendo títulos vistos e infantiles, sin filtros de plataformas.
 
 - La sección Resumen se ha eliminado. La ruta antigua `/dashboard` redirige a
   `/movies` para conservar marcadores anteriores. Los totales siguen disponibles

@@ -19,6 +19,7 @@ function fixture(kids = false) {
   const kidsTab = { href: "http://local/kids/series" };
   const cardResults = {
     setAttribute(name, value) { attributes[name] = value; },
+    hasAttribute() { return false; },
     replaceChildren() {},
     addEventListener(type, callback) { listeners[type] = callback; },
   };

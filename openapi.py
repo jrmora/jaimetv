@@ -64,7 +64,6 @@ def build_openapi_spec(server_url="/"):
         _query("view", "Formato adicional de tarjetas.", enum=["table", "cards"]),
         _query("watched", "Filtro de vistos.", enum=["all", "seen", "unseen"]),
         _query("banned", "Filtro de títulos bloqueados.", enum=["hide", "only"]),
-        _query("tmdb_status", "Estado de asociación TMDB.", enum=["all", "matched", "candidates", "missing", "pending"]),
         _query("provider", "Plataformas; se puede repetir.", array=True),
         _query("access", "Modalidad de disponibilidad.", enum=["all", "flatrate", "rent", "buy", "free", "ads"]),
         _query("my_services", "Filtro de servicios propios (0, 1 o 2).", enum=["0", "1", "2"]),

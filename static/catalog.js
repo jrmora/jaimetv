@@ -35,8 +35,6 @@ function parameters() {
   const params = new URLSearchParams(new FormData(form));
   const children = params.getAll("children");
   if (children.length) params.set("children", children.at(-1));
-  const services = params.getAll("my_services");
-  if (services.length) params.set("my_services", services.at(-1));
   return params;
 }
 
@@ -101,11 +99,33 @@ for (const input of document.querySelectorAll('input[type="search"][name][form="
     timer = setTimeout(() => load(), 250);
   });
 }
-for (const select of form.querySelectorAll("select")) {
-  select.addEventListener("change", () => load());
+const orderingInput = form.querySelector("#ordering");
+function syncOrdering(value) {
+  orderingInput.value = value;
+  for (const button of form.querySelectorAll("[data-ordering]")) {
+    const active = button.dataset.ordering === value;
+    button.classList.toggle("btn-primary", active);
+    button.classList.toggle("btn-outline-primary", !active);
+    button.setAttribute("aria-pressed", String(active));
+  }
+  const select = form.querySelector("#sort-by");
+  if (select) {
+    const quick = value === "rating:desc" || value === "votes:desc";
+    select.value = quick ? "" : value;
+  }
 }
+for (const button of form.querySelectorAll("[data-ordering]")) {
+  button.addEventListener("click", () => {
+    syncOrdering(button.dataset.ordering);
+    load();
+  }, { signal });
+}
+form.querySelector("#sort-by")?.addEventListener("change", (event) => {
+  syncOrdering(event.target.value);
+  load();
+});
 form.querySelector("#children-toggle")?.addEventListener("change", () => load());
-for (const input of form.querySelectorAll('.filter-chips input, .provider-options input, input[name="watched"], input[name="my_services"]')) {
+for (const input of form.querySelectorAll('.filter-chips input, input[name="provider"], input[name="watched"]')) {
   input.addEventListener("change", () => load());
 }
 genreControls?.addEventListener("change", (event) => {
@@ -128,4 +148,5 @@ cardResults.addEventListener("click", (event) => {
 });
 document.addEventListener("movie-state-changed", () => load(Number(form.elements.page.value)), { signal });
 updateChildrenCategories();
+if (cardResults.hasAttribute("data-autoload")) load(Number(form.elements.page.value));
 });

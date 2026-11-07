@@ -41,68 +41,13 @@ class ProviderFilterTests(unittest.TestCase):
     def cache(self, kind, record_id, providers, status="matched", country="CA"):
         raw = self.store.detail(kind, str(record_id))["data"]
         self.store.save_tmdb(kind, str(record_id), country, fingerprint(raw), {
-            "status": status, "providers": providers, "id": 63, "country": country,
+            "status": status, "providers": providers,
+            "id": (200000 if kind == "series" else 100000) + int(record_id),
+            "country": country,
         })
 
     def ids(self, **kwargs):
         return {item["id"] for item in self.store.query("movies", **kwargs)["items"]}
-
-    def test_tmdb_status_filter_uses_current_canadian_cache(self):
-        self.cache("movies", 10, {}, status="candidates")
-        self.cache("movies", 11, {}, status="missing")
-        self.cache("movies", 12, {"flatrate": ["Netflix"]})
-        self.assertEqual(self.ids(tmdb_status="candidates"), {"10"})
-        self.assertEqual(self.ids(tmdb_status="missing"), {"11"})
-        self.assertEqual(self.ids(tmdb_status="matched"), {"12"})
-        self.assertEqual(self.ids(tmdb_status="pending"), {"13"})
-        self.assertEqual(self.ids(tmdb_status="all"), {"10", "11", "12", "13"})
-        self.assertEqual(self.ids(tmdb_status="candidates", q="bat", category="1"), {"10"})
-        self.assertEqual(self.ids(tmdb_status="candidates", provider=["Netflix"]), set())
-        self.cache("movies", 13, {}, status="candidates", country="US")
-        self.assertEqual(self.ids(tmdb_status="pending"), {"13"})
-        changed = copy.deepcopy(self.data)
-        changed["movies"][0]["name"] = "Changed"
-        self.store.replace(changed)
-        self.assertEqual(self.ids(tmdb_status="candidates"), set())
-        self.assertEqual(self.ids(tmdb_status="pending"), {"10", "13"})
-
-    def test_tmdb_status_ui_api_detail_links_and_resolution(self):
-        self.cache("movies", 10, {}, status="candidates")
-        html = self.client.get("/movies?tmdb_status=candidates").get_data(as_text=True)
-        self.assertIn('id="tmdb-status"', html)
-        self.assertIn('value="candidates" selected', html)
-        self.assertIn("Por elegir", html)
-        self.assertIn("tmdb_status=candidates", html)
-        payload = self.client.get("/api/catalog/movies?view=cards&tmdb_status=candidates").json
-        self.assertEqual(payload["total"], 1)
-        self.assertIn("tmdb_status=candidates", payload["html"])
-        detail = self.client.get("/catalog/movies/detail?id=10&tmdb_status=candidates").get_data(as_text=True)
-        self.assertIn("tmdb_status=candidates", detail)
-        self.cache("movies", 10, {"flatrate": ["Netflix"]})
-        self.assertEqual(self.ids(tmdb_status="candidates"), set())
-        self.assertEqual(self.ids(tmdb_status="matched"), {"10"})
-        self.cache("series", 20, {}, status="candidates")
-        self.assertEqual(self.store.query("series", tmdb_status="candidates")["total"], 1)
-        for path in ("/series", "/kids/movies", "/kids/series", "/movies?foreign=1"):
-            self.assertIn('id="tmdb-status"', self.client.get(path).get_data(as_text=True))
-        self.assertNotIn('id="tmdb-status"', self.client.get("/channels").get_data(as_text=True))
-        for path in ("/movies?tmdb_status=bad", "/api/catalog/movies?tmdb_status=bad",
-                     "/channels?tmdb_status=candidates"):
-            self.assertEqual(self.client.get(path).status_code, 400)
-        with self.assertRaises(ValueError):
-            self.store.query("channels", tmdb_status="candidates")
-
-    def test_candidate_filter_pagination_and_banned_movies(self):
-        data = snapshot()
-        data["movies"] = [{"stream_id": i, "name": f"Movie {i:03}"} for i in range(55)]
-        self.store.replace(data)
-        for number in range(55):
-            self.cache("movies", number, {}, status="candidates")
-        self.store.set_movie_banned("0", True)
-        payload = self.client.get("/api/catalog/movies?view=cards&tmdb_status=candidates&page=2").json
-        self.assertEqual((payload["total"], payload["pages"], len(payload["items"])), (54, 2, 4))
-        self.assertIn("tmdb_status=candidates", payload["html"])
-        self.assertEqual(self.store.tmdb_coverage("movies")["candidates"], 55)
 
     def test_provider_or_access_and_subscription_intersection(self):
         self.cache("movies", 10, {"flatrate": ["Netflix"], "rent": ["YouTube"]})
@@ -172,7 +117,6 @@ class ProviderFilterTests(unittest.TestCase):
             "Netflix", "Amazon Prime Video", "Apple TV", "Disney Plus", "Paramount Plus", "Acorn TV", "Zed",
         ])
         html = self.client.get("/movies?provider=Netflix+Kids").get_data(as_text=True)
-        self.assertEqual(re.findall(r'data-provider-name="([^"]+)"', html), names)
         self.assertNotIn("Netflix Kids", html)
         self.assertIn('value="Netflix" checked', html)
         self.cache("movies", 10, {"flatrate": ["Netflix", "Netflix Kids", "Netflix Standard with Ads"]})
@@ -197,7 +141,6 @@ class ProviderFilterTests(unittest.TestCase):
         self.assertEqual(payload["total"], 1)
         self.assertNotIn('class="card-services', payload["html"])
         self.assertIn("my_services=2", payload["html"])
-        self.assertNotIn("matched_services", payload["items"][0])
 
     def test_outside_services_respects_country_fingerprint_status_and_access(self):
         self.set_services(["Netflix"])
@@ -213,9 +156,9 @@ class ProviderFilterTests(unittest.TestCase):
         self.assertEqual(self.ids(my_services=2, access="all"), set())
         self.cache("movies", 12, {})
         self.assertEqual(self.ids(my_services=2), {"10", "12"})
-        self.assertEqual(self.client.get("/channels?my_services=2").status_code, 400)
+        self.assertEqual(self.client.get("/channels?my_services=2").status_code, 404)
         self.assertEqual(self.client.get("/movies?my_services=3").status_code, 400)
-        self.assertEqual(self.client.get("/api/catalog/channels?my_services=2").status_code, 400)
+        self.assertEqual(self.client.get("/api/catalog/channels?my_services=2").status_code, 404)
         with self.assertRaises(ValueError):
             self.store.query("channels", my_services=2)
 
@@ -255,14 +198,14 @@ class ProviderFilterTests(unittest.TestCase):
         self.assertEqual(set(CatalogStore(self.path).subscriptions()), set(names))
         html = self.client.get("/movies?my_services=1").get_data(as_text=True)
         self.assertNotIn('<script>alert("provider")</script>', html)
-        self.assertIn("&lt;script&gt;", html)
-        self.assertIn("Amazon Prime Video", html)
+        self.assertNotIn("Mis servicios", html)
+        self.assertIn('value="Amazon Prime Video"', html)
         for button in ("save-services", "select-services", "clear-providers"):
             self.assertNotIn(f'id="{button}"', html)
         for names in (["x" * 201], [""], [False], "Netflix"):
             self.set_services(names)
             with self.assertLogs(self.app.logger, level="WARNING"):
-                response = self.client.get("/movies")
+                response = self.client.get("/movies?my_services=1")
             self.assertEqual(response.status_code, 500)
             self.assertIn("services.json", response.get_data(as_text=True))
 
@@ -305,8 +248,12 @@ class ProviderFilterTests(unittest.TestCase):
             result = self.client.get("/api/catalog/movies?view=cards&" + query).json
             self.assertNotIn('alt="Amazon Prime Video"', result["html"])
             self.assertIn('alt="Netflix"', result["html"])
-        self.assertNotIn("card-service-logo", self.client.get("/movies").get_data(as_text=True))
-        self.assertNotIn("card-service-logo", self.client.get("/movies?provider=Netflix").get_data(as_text=True))
+        movies_html = self.client.get("/movies").get_data(as_text=True)
+        self.assertIn('alt="Netflix"', movies_html)
+        self.assertIn('alt="Amazon Prime Video"', movies_html)
+        provider_html = self.client.get("/movies?provider=Netflix").get_data(as_text=True)
+        self.assertIn('alt="Netflix"', provider_html)
+        self.assertNotIn('alt="Amazon Prime Video"', provider_html)
 
     def test_subscription_cards_fallback_to_names_when_logo_is_missing(self):
         self.set_services(["Unknown platform"])
@@ -321,14 +268,16 @@ class ProviderFilterTests(unittest.TestCase):
             with self.subTest(url=url):
                 html = self.client.get(url).get_data(as_text=True)
                 self.assertIn('id="provider-filter"', html)
-                self.assertIn("Canadá (CA)", html)
-                self.assertIn('id="my-services-toggle"', html)
+                self.assertIn('name="provider"', html)
+                self.assertIn('value="Netflix"', html)
+                self.assertIn('value="Amazon Prime Video"', html)
+                self.assertNotIn('name="my_services"', html)
                 self.assertNotIn('id="tmdb-batch-start"', html)
                 self.assertNotIn('id="tmdb-batch-controls"', html)
-                self.assertIn("pendientes", html)
+                self.assertNotIn('id="tmdb-status"', html)
         self.assertNotIn('id="provider-filter"', self.client.get("/channels").get_data(as_text=True))
         for query in ("provider=Netflix", "my_services=1"):
-            self.assertEqual(self.client.get(f"/api/catalog/channels?{query}").status_code, 400)
+            self.assertEqual(self.client.get(f"/api/catalog/channels?{query}").status_code, 404)
         for query in ("access=invalid", "my_services=true", "provider=" + "x" * 201):
             self.assertEqual(self.client.get("/api/catalog/movies?" + query).status_code, 400)
 
@@ -368,8 +317,13 @@ class TMDBBatchTests(unittest.TestCase):
         self.job = self.app.config["TMDB_BATCH"]
         self.remote = Mock()
         self.remote.get.return_value = {"results": [{"provider_name": "Netflix"}, {"provider_name": "Crave"}]}
-        self.remote.search.return_value = ([], 63)
-        self.remote.details.return_value = {"status": "matched", "id": 63, "providers": {"flatrate": ["Netflix"]}}
+        self.remote.search.side_effect = lambda kind, data: (
+            [],
+            (200000 if kind == "series" else 100000) + int(data.get("series_id", data.get("stream_id"))),
+        )
+        self.remote.details.side_effect = lambda kind, tmdb_id: {
+            "status": "matched", "id": tmdb_id, "providers": {"flatrate": ["Netflix"]},
+        }
         self.factory = Mock(return_value=self.remote)
         self.app.config["TMDB_CLIENT_FACTORY"] = self.factory
         self.client = self.app.test_client()
