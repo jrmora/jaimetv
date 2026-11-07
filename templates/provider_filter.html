@@ -1,21 +1,19 @@
-<fieldset id="provider-filter">
+<fieldset id="provider-filter" class="filter-chips">
   <legend class="fs-6">Dónde se puede ver</legend>
   {% set selected = filters.get('provider', []) %}
-  <div class="form-check">
-    <input class="form-check-input" type="radio" name="provider" id="provider-all" value="" {% if not selected %}checked{% endif %}>
-    <label class="form-check-label" for="provider-all">Todas</label>
-  </div>
-  {% for provider in streaming_choices %}
-  <div class="form-check">
-    <input class="form-check-input" type="radio" name="provider" id="provider-{{ loop.index }}" value="{{ provider.name }}" {% if selected == [provider.name] %}checked{% endif %}>
-    <label class="form-check-label d-inline-flex align-items-center" for="provider-{{ loop.index }}" title="{{ provider.name }}">
+  <div class="d-flex flex-wrap align-items-center gap-2">
+    <input class="btn-check" type="radio" name="provider" id="provider-all" value="" {% if not selected %}checked{% endif %}>
+    <label class="btn btn-outline-secondary rounded-pill" for="provider-all">Todas</label>
+    {% for provider in streaming_choices %}
+    <input class="btn-check" type="radio" name="provider" id="provider-{{ loop.index }}" value="{{ provider.name }}" {% if selected == [provider.name] %}checked{% endif %}>
+    <label class="provider-choice rounded" for="provider-{{ loop.index }}" title="{{ provider.name }}">
       {% if provider.filename %}
-      <img src="{{ url_for('static', filename=provider.filename) }}" width="28" height="28" class="rounded" alt="{{ provider.name }}" loading="lazy">
+      <img src="{{ url_for('static', filename=provider.filename) }}" width="40" height="40" alt="{{ provider.name }}" loading="lazy">
       <span class="visually-hidden">{{ provider.name }}</span>
       {% else %}
       {{ provider.name }}
       {% endif %}
     </label>
+    {% endfor %}
   </div>
-  {% endfor %}
 </fieldset>

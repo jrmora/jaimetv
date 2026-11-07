@@ -241,7 +241,7 @@ class ProviderFilterTests(unittest.TestCase):
             self.assertIn('alt="Netflix"', batman_card)
             self.assertIn('alt="Amazon Prime Video"', batman_card)
             self.assertNotIn("Crave", batman_card)
-            self.assertIn('width="24" height="24"', batman_card)
+            self.assertIn('<span class="card-services"', batman_card)
             single_card = next(card for card in cards if "Batman" not in card)
             self.assertEqual(single_card.count('class="card-service-logo'), 1)
         for query in ("my_services=1&provider=Netflix", "my_services=1&access=rent"):

@@ -1102,7 +1102,7 @@ class CatalogStore:
         tmdb_rating = "idx.rating"
         votes = "idx.votes"
         order = (
-            f"(({tmdb_rating}) * ({votes}) + 100.0 * ?) / (({votes}) + 100.0)"
+            f"(({tmdb_rating}) * ({votes}) + 900.0 * ?) / (({votes}) + 900.0)"
             if sort_by == "rating" else SORT_COLUMNS[sort_by]
         )
         year = "idx.year"

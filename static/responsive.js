@@ -15,6 +15,17 @@
       toggle.setAttribute("aria-expanded", String(filters.open));
     });
   }
+  const collapse = () => {
+    if (!compact.matches || !filters.open) return;
+    filters.open = false;
+    if (toggle) toggle.setAttribute("aria-expanded", "false");
+  };
+  root.addEventListener("change", (event) => {
+    if (event.target.closest?.("#filters, #catalog-genres, #kids-categories")) collapse();
+  }, { signal });
+  root.addEventListener("click", (event) => {
+    if (event.target.closest?.("#filters [data-ordering]")) collapse();
+  }, { signal });
   const update = () => {
     filters.open = !compact.matches;
     if (toggle) {

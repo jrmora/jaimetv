@@ -15,7 +15,7 @@ test("tablet filters start collapsed and desktop filters reopen on resize", () =
     addEventListener(event, handler) { change = handler; },
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/responsive.js"), "utf8"), withSpa({
-    document: { querySelector: selector => selector === "#catalog-filters" ? filters : null },
+    document: { querySelector: selector => selector === "#catalog-filters" ? filters : null, addEventListener() {} },
     matchMedia: () => media,
   }));
 
@@ -44,7 +44,7 @@ test("compact filter button opens and closes the panel with an accessible state"
       setAttribute(name, value) { attributes[name] = value; },
     };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/responsive.js"), "utf8"), withSpa({
-      document: { querySelector: selector => selector === "#catalog-filters" ? filters : toggle },
+      document: { querySelector: selector => selector === "#catalog-filters" ? filters : toggle, addEventListener() {} },
       matchMedia: () => ({ matches: true, addEventListener() {} }),
     }));
     assert.equal(toggle.hidden, false);
@@ -57,3 +57,27 @@ test("compact filter button opens and closes the panel with an accessible state"
     assert.equal(filters.open, false);
     assert.equal(attributes["aria-expanded"], "false");
   });
+
+test("applying a filter on compact screens collapses the filter panel", () => {
+  const filters = { open: true, classList: { add() {} }, addEventListener() {} };
+  const toggle = { hidden: false, addEventListener() {}, setAttribute(name, value) { this[name] = value; } };
+  const listeners = {};
+  const root = {
+    querySelector: selector => ({ "#catalog-filters": filters, "#filters-toggle": toggle })[selector] || null,
+    addEventListener(event, handler) { listeners[event] = handler; },
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../static/responsive.js"), "utf8"), withSpa({
+    document: root,
+    matchMedia: () => ({ matches: true, addEventListener() {} }),
+  }));
+  filters.open = true;
+  const target = (hit) => ({ closest: () => (hit ? {} : null) });
+  listeners.change({ target: target(true) });
+  assert.equal(filters.open, false);
+  filters.open = true;
+  listeners.click({ target: target(true) });
+  assert.equal(filters.open, false);
+  filters.open = true;
+  listeners.click({ target: target(false) });
+  assert.equal(filters.open, true, "clicks that are not sort buttons keep the panel open");
+});
