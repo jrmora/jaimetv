@@ -316,23 +316,8 @@ class CatalogStore:
                 )
             """)
             db.execute("DROP TABLE IF EXISTS provider_metadata")
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS movie_audio_metadata (
-                    record_id TEXT PRIMARY KEY,
-                    fingerprint TEXT NOT NULL,
-                    checked_at TEXT NOT NULL,
-                    payload TEXT NOT NULL
-                )
-            """)
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS movie_audio_job (
-                    record_id TEXT PRIMARY KEY,
-                    fingerprint TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    started_at REAL NOT NULL,
-                    error TEXT
-                )
-            """)
+            db.execute("DROP TABLE IF EXISTS movie_audio_metadata")
+            db.execute("DROP TABLE IF EXISTS movie_audio_job")
             db.execute("""
                 CREATE TABLE IF NOT EXISTS kids_category_overrides (
                     kind TEXT NOT NULL,
@@ -843,9 +828,6 @@ class CatalogStore:
     def _delete_title(self, db, kind, record_id):
         table, _, key = KINDS[kind]
         db.execute(f"DELETE FROM {table} WHERE {key}=?", (record_id,))
-        if kind == "movies":
-            db.execute("DELETE FROM movie_audio_metadata WHERE record_id=?", (record_id,))
-            db.execute("DELETE FROM movie_audio_job WHERE record_id=?", (record_id,))
         for related in ("tmdb_metadata", "watchlist", "provider_removed", "kids_category_overrides"):
             db.execute(f"DELETE FROM {related} WHERE kind=? AND record_id=?", (kind, record_id))
         for state in ("watched", "banned"):
@@ -1000,9 +982,6 @@ class CatalogStore:
                     f"DELETE FROM kids_category_overrides WHERE kind=? AND record_id NOT IN (SELECT {key} FROM {table})",
                     (kind,),
                 )
-                if kind == "movies":
-                    db.execute("DELETE FROM movie_audio_metadata WHERE record_id NOT IN (SELECT stream_id FROM movies)")
-                    db.execute("DELETE FROM movie_audio_job WHERE record_id NOT IN (SELECT stream_id FROM movies)")
                 ids = json.dumps(sorted(listed[table]))
                 for row in db.execute(
                     f"""SELECT r.record_id, s.raw_json FROM provider_removed r JOIN {table} s ON s.{key}=r.record_id

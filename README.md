@@ -21,32 +21,9 @@ La consulta experimental de fichas técnicas individuales del proveedor y su
 diagnóstico JSON se han retirado. Al abrir la base de datos se elimina su
 tabla auxiliar, sin afectar al catálogo, TMDB ni las preferencias personales.
 
-### Comprobar idiomas de audio (opcional, solo películas)
-
-En la parte superior de la ficha, «Audio → Comprobar» inspecciona las pistas
-de la copia elegida en segundo plano desde el servidor. Requiere `ffprobe`
-del paquete de sistema FFmpeg (en Ubuntu/Oracle: `sudo apt install ffmpeg`).
-Sin él se muestra un error; el resto de la aplicación funciona normalmente.
-No requiere paquetes Python adicionales.
-
-Se guardan fecha, idiomas declarados y cantidad de pistas en SQLite, por
-identificador de copia, sin compartirlos con otras versiones del mismo título.
-Al volver a abrir la ficha se muestran códigos compactos como ES y EN sin
-repetir la inspección. «?» indica pistas sin idioma conocido; no se deduce el
-audio de TMDB, de los subtítulos ni del nombre. Son etiquetas del archivo,
-no reconocimiento del idioma hablado. Cambios en el JSON de la copia
-invalidan la visualización guardada; los fallos no borran resultados previos.
-Si cambias de proveedor/cuenta, vuelve a comprobar las copias.
-
-Solo se inicia con el botón: navegar, sincronizar o exportar no inspecciona
-vídeos. Hay una comprobación simultánea por base de datos, con un máximo
-de 20 segundos de proceso, 12 MiB de datos leídos y 16 peticiones de lectura.
-La transferencia tiene además búferes, cabeceras y sobrecarga de red. Puede ocupar
-una conexión de la cuenta IPTV e interferir con la reproducción.
-Algunos archivos necesitan más lectura o usan redirecciones, que no se
-siguen: en esos casos se muestra el error, no se inventan idiomas.
-Las credenciales se usan solo dentro del servidor, no en argumentos de
-ffprobe, HTML ni registros. No se guarda el vídeo ni el JSON técnico completo.
+Al abrir la base de datos se eliminan las tablas auxiliares de la antigua
+comprobación de audio (`movie_audio_metadata` y `movie_audio_job`), sin afectar
+al catálogo, TMDB ni las preferencias personales.
 
 ## Configuración
 
@@ -860,6 +837,9 @@ incluyendo títulos vistos e infantiles, sin filtros de plataformas.
   La interfaz siempre solicita `view=cards`, que acepta `page` (entero positivo) y devuelve un máximo de 50
   elementos, `total`, `page`, `pages`, `per_page` y el fragmento HTML `html`.
   Las páginas superiores al límite se ajustan a la última disponible.
+- `/api/docs`: documentación interactiva (Swagger UI) de las rutas JSON, accesible desde
+  el panel de Administración. `/api/openapi.json` devuelve la especificación OpenAPI.
+  Ambas requieren sesión.
 
 Bootstrap 5.3.3 se carga desde jsDelivr con comprobación de integridad. Requiere
 acceso a Internet para los estilos Bootstrap; los datos y la búsqueda se sirven

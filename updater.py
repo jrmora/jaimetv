@@ -78,7 +78,7 @@ def deploy():
                 test_env.pop("IPTV_AUTH_PATH", None)
                 test_env.pop("IPTV_UPDATE_STATE", None)
                 subprocess.run(
-                    [str(python), "-m", "unittest", "test_movie_audio", "test_vod_only", "test_tmdb_filters", "test_tmdb_people",
+                    [str(python), "-m", "unittest", "test_vod_only", "test_tmdb_filters", "test_tmdb_people",
                      "test_movie_versions", "test_title_index", "test_kids_categories", "test_performance", "test_database_concurrency", "test_recommendations", "test_watchlist", "test_trailer_player", "test_admin", "test_auth", "test_updater",
                      "test_web_sync", "test_watched", "test_banned"],
                     cwd=code, env=test_env, check=True, capture_output=True, timeout=900,

@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 import pandas as pd
 from flask import Flask, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
+from openapi import build_openapi_spec
 from catalog import CatalogStore, KINDS, SORT_COLUMNS, CHILDREN_CATEGORIES, PROVIDER_ACCESS, TMDB_STATUSES, MOVIE_ERAS, people_names, non_latin_title, youtube_trailer_url, valid_image, PERFORMANCE_TIMINGS
 from xtream import CatalogError, XtreamClient
 from tmdb import TMDBClient, TMDBError, TMDBRateLimitError, enrich, fingerprint, recommended_titles
@@ -24,7 +25,6 @@ from platforms import ordered_platforms
 from auth import configure_auth
 from updater import read_state, write_state
 from kids_categories import DEFAULT_KIDS_CATEGORIES, KIDS_CATEGORIES
-from movie_audio import MovieAudioJobs, probe_movie
 
 
 LABELS = {"movies": "Películas", "series": "Series"}
@@ -50,8 +50,6 @@ def create_app(db_path=None):
     sync_state = {"status": "idle"}
     tmdb_batch = TMDBBatch(store, app.logger)
     app.config["TMDB_BATCH"] = tmdb_batch
-    movie_audio = MovieAudioJobs(store, app.logger)
-    app.config["MOVIE_AUDIO_JOBS"] = movie_audio
     update_directory = os.environ.get("IPTV_UPDATE_STATE")
     app.config["UPDATE_ENABLED"] = bool(update_directory and app.config["AUTH_ENABLED"])
     update_lock = threading.RLock()
@@ -112,7 +110,7 @@ def create_app(db_path=None):
         with update_lock, sync_lock:
             if update_status()["status"] == "running":
                 return jsonify(error="Ya hay una actualización en curso."), 409
-            if sync_state["status"] == "running" or tmdb_batch.status()["status"] == "running" or movie_audio.running():
+            if sync_state["status"] == "running" or tmdb_batch.status()["status"] == "running":
                 return jsonify(error="Espera a que terminen los procesos en curso antes de actualizar."), 409
             directory = Path(update_directory)
             try:
@@ -129,26 +127,6 @@ def create_app(db_path=None):
         expected = session.get("sync_csrf")
         if not expected or not token.isascii() or not secrets.compare_digest(token, expected):
             abort(400, description="La sesión ha caducado. Recarga la página.")
-
-    @app.route("/api/movies/<record_id>/audio", methods=["GET", "POST"])
-    def movie_audio_info(record_id):
-        record = store.detail("movies", record_id)
-        if record is None:
-            abort(404, description="Esta copia no existe en el catálogo.")
-        if request.method == "POST":
-            check_sync_csrf()
-            try:
-                started = movie_audio.start(
-                    record_id, app.config.get("XTREAM_CLIENT_FACTORY", XtreamClient.from_env),
-                    app.config.get("MOVIE_AUDIO_PROBE", probe_movie),
-                )
-            except CatalogError as exc:
-                app.logger.warning("No se pudo iniciar la comprobación de audio: %s", exc)
-                return jsonify(error=str(exc)), 400
-            if not started:
-                return jsonify(error="Ya hay una comprobación de audio en curso. Espera a que termine."), 409
-            return jsonify(running=True), 202
-        return jsonify(movie_audio.status(record_id))
 
     @app.route("/api/tmdb/batch", methods=["GET", "POST"])
     def tmdb_batch_job():
@@ -451,6 +429,15 @@ def create_app(db_path=None):
             sync_summary=store.last_sync_summary(),
         )
 
+    @app.get("/api/docs")
+    def api_docs():
+        session.setdefault("tmdb_csrf", secrets.token_urlsafe(32))
+        return render_template("api_docs.html", labels=LABELS, active="admin")
+
+    @app.get("/api/openapi.json")
+    def openapi_spec():
+        return jsonify(build_openapi_spec())
+
     @app.get("/movies", defaults={"kind": "movies"})
     @app.get("/series", defaults={"kind": "series"})
     @app.get("/kids/<kind>", endpoint="kids_listing")
@@ -610,9 +597,6 @@ def create_app(db_path=None):
             "detail.html", record=record, fields=fields, trailer_url=trailer_url, people=people, category_links=category_links, kind=kind, image_url=image_url, backdrop_urls=backdrop_urls, filters=filters,
             content_metadata=store.tmdb_cached(kind, request.args.get("id", ""), "CA", fingerprint(record["data"])) if kind in {"movies", "series"} else None,
             kids_categories=store.kids_categories(kind, request.args.get("id", "")),
-            movie_audio_states={
-                version["id"]: movie_audio.status(version["id"]) for version in record["versions"]
-            } if kind == "movies" else {},
             back_url=(
                 url_for("person_results", name=request.args["person"], view=filters["view"],
                         movies_page=page_number("movies_page"), series_page=page_number("series_page"))
@@ -755,14 +739,15 @@ def create_app(db_path=None):
             children = request.args.getlist("children")[-1]
             if children in {"all", "exclude"} and response.status_code == 200:
                 response.set_cookie("children_visibility", children, max_age=31536000, httponly=True, samesite="Lax")
-        if request.endpoint in {"listing", "catalog_api", "kids_listing", "detail", "person_results", "dashboard", "catalog_sync", "tmdb_batch_job", "movie_audio_info"}:
+        if request.endpoint in {"listing", "catalog_api", "kids_listing", "detail", "person_results", "dashboard", "catalog_sync", "tmdb_batch_job"}:
             response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
         image_sources = " http: https:" if request.endpoint in {"detail", "listing", "kids_listing", "person_results"} else ""
+        swagger_sources = " https://cdn.jsdelivr.net" if request.endpoint == "api_docs" else ""
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; style-src 'self' https://cdn.jsdelivr.net; "
-            f"script-src 'self'; img-src 'self' data:{image_sources}; "
+            f"script-src 'self'{swagger_sources}; img-src 'self' data:{image_sources}; "
             "frame-src https://www.youtube-nocookie.com; base-uri 'none'; frame-ancestors 'none'"
         )
         return response

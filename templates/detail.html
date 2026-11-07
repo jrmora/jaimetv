@@ -19,7 +19,7 @@
   'tv_archive': 'Archivo de TV disponible', 'tv_archive_duration': 'Días de archivo de TV',
   'is_adult': 'Contenido para adultos', 'seasons': 'Temporadas'
 } %}
-<div class="detail-layout{% if record.get('version_count', 1) > 1 %} has-versions{% endif %}{% if kind == 'movies' %} has-audio{% endif %} row g-4 align-items-start">
+<div class="detail-layout{% if record.get('version_count', 1) > 1 %} has-versions{% endif %} row g-4 align-items-start">
   <aside class="col-12 col-md-4 col-lg-3" aria-label="Imágenes del registro">
     {% if record.get('version_count', 1) > 1 %}
     <h2 class="h6">{{ record.version_count }} versiones disponibles</h2>
@@ -50,7 +50,6 @@
       <h1 class="text-break mb-0">{{ record.name }}</h1>
       <a id="back-button" class="btn btn-outline-secondary icon-button flex-shrink-0" href="{{ back_url or url_for('listing', kind='movies') }}" aria-label="Atrás" title="Atrás"><span aria-hidden="true">←</span></a>
     </header>
-    {% if kind == 'movies' %}{% include "movie_audio.html" %}{% endif %}
     {% if record.get('unavailable') %}
     <p class="alert alert-danger py-2" role="status">El proveedor ya no ofrece este título. Se conserva en tu catálogo, pero probablemente no se pueda reproducir.</p>
     {% endif %}
@@ -178,7 +177,6 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='detail.js') }}" defer></script>
-{% if kind == 'movies' %}<script src="{{ url_for('static', filename='movie-audio.js') }}" defer></script>{% endif %}
 <script src="{{ url_for('static', filename='tmdb.js') }}" defer></script>
 <script src="{{ url_for('static', filename='recommendations.js') }}" defer></script>
 {% endblock %}

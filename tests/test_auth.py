@@ -43,6 +43,7 @@ class AuthTests(unittest.TestCase):
         for path in ("/movies", "/series", "/channels", "/catalog/movies/1", "/admin"):
             self.assertEqual(self.client.get(path).location, "/login")
         for method, path in (("get", "/api/catalog/movies"), ("post", "/api/sync"),
+                             ("get", "/api/docs"), ("get", "/api/openapi.json"),
                              ("post", "/catalog/movies/1/watched")):
             response = getattr(self.client, method)(path)
             self.assertEqual(response.status_code, 401)
@@ -50,6 +51,16 @@ class AuthTests(unittest.TestCase):
             self.assertIn("X-Request-ID", response.headers)
         with self.client.get("/static/theme.js") as response:
             self.assertEqual(response.status_code, 200)
+
+    def test_swagger_docs_and_openapi_are_available_after_login(self):
+        self.login()
+        docs = self.client.get("/api/docs", base_url="https://localhost")
+        self.assertEqual(docs.status_code, 200)
+        self.assertIn(b"swagger-ui", docs.data)
+        self.assertIn("https://cdn.jsdelivr.net", docs.headers["Content-Security-Policy"])
+        specification = self.client.get("/api/openapi.json", base_url="https://localhost")
+        self.assertEqual(specification.status_code, 200)
+        self.assertIn("/api/catalog/{kind}", specification.get_json()["paths"])
 
     def test_login_csrf_cookie_rotation_and_logout(self):
         old = self.token()
